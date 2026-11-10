@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "HazardClass": {
+      "enum": [
+        "none",
+        "chemical",
+        "flammable"
+      ],
+      "title": "HazardClass",
+      "type": "string"
+    },
+    "TemperatureClass": {
+      "enum": [
+        "ambient",
+        "chilled",
+        "frozen"
+      ],
+      "title": "TemperatureClass",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string"
+    },
+    "pack_size": {
+      "title": "Pack Size",
+      "type": "string"
+    },
+    "mrp_inr": {
+      "minimum": 0.0,
+      "title": "Mrp Inr",
+      "type": "number"
+    },
+    "popularity_rank": {
+      "minimum": 1,
+      "title": "Popularity Rank",
+      "type": "integer"
+    },
+    "size_class": {
+      "default": "medium",
+      "title": "Size Class",
+      "type": "string"
+    },
+    "fragile": {
+      "default": false,
+      "title": "Fragile",
+      "type": "boolean"
+    },
+    "handling_difficulty": {
+      "default": 1.0,
+      "maximum": 5.0,
+      "minimum": 0.5,
+      "title": "Handling Difficulty",
+      "type": "number"
+    },
+    "unit_weight_g": {
+      "minimum": 1,
+      "title": "Unit Weight G",
+      "type": "integer"
+    },
+    "dimensions_mm": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Dimensions Mm",
+      "type": "array"
+    },
+    "temperature_class": {
+      "$ref": "#/$defs/TemperatureClass",
+      "default": "ambient"
+    },
+    "shelf_life_days": {
+      "default": 180,
+      "minimum": 1,
+      "title": "Shelf Life Days",
+      "type": "integer"
+    },
+    "hazard_class": {
+      "$ref": "#/$defs/HazardClass",
+      "default": "none"
+    }
+  },
+  "required": [
+    "sku_id",
+    "name",
+    "category",
+    "pack_size",
+    "mrp_inr",
+    "popularity_rank",
+    "unit_weight_g"
+  ],
+  "title": "Sku",
+  "type": "object"
+}

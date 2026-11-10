@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "Coordinate": {
+      "description": "2D grid coordinates (x East, y South).",
+      "properties": {
+        "x": {
+          "description": "Column index (East)",
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Row index (South)",
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Coordinate",
+      "type": "object"
+    },
+    "TaskState": {
+      "enum": [
+        "PENDING",
+        "ASSIGNED",
+        "EXECUTING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "title": "TaskState",
+      "type": "string"
+    },
+    "TaskType": {
+      "enum": [
+        "FETCH_BIN",
+        "DELIVER_TO_STATION",
+        "RETURN_BIN",
+        "CARRY_ORDER_TOTE",
+        "CHARGE",
+        "PARK",
+        "WANDER"
+      ],
+      "title": "TaskType",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_type": {
+      "$ref": "#/$defs/TaskType"
+    },
+    "state": {
+      "$ref": "#/$defs/TaskState",
+      "default": "PENDING"
+    },
+    "target_cell": {
+      "$ref": "#/$defs/Coordinate"
+    },
+    "robot_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Robot Id"
+    },
+    "order_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Order Ids",
+      "type": "array"
+    },
+    "bin_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bin Id"
+    },
+    "station_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Station Id"
+    },
+    "dwell_ticks": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Dwell Ticks",
+      "type": "integer"
+    },
+    "created_tick": {
+      "minimum": 0,
+      "title": "Created Tick",
+      "type": "integer"
+    },
+    "deadline_tick": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deadline Tick"
+    }
+  },
+  "required": [
+    "task_id",
+    "task_type",
+    "target_cell",
+    "created_tick"
+  ],
+  "title": "Task",
+  "type": "object"
+}

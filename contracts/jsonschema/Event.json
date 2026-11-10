@@ -1,0 +1,47 @@
+{
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "seq": {
+      "description": "Strictly increasing sequential event index",
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "tick": {
+      "description": "Simulation discrete integer tick",
+      "minimum": 0,
+      "title": "Tick",
+      "type": "integer"
+    },
+    "sim_time_ms": {
+      "description": "Derived simulation time in milliseconds",
+      "minimum": 0,
+      "title": "Sim Time Ms",
+      "type": "integer"
+    },
+    "event_type": {
+      "description": "Dotted event type string, e.g. sim.started, robot.arrived",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "description": "Event payload dictionary",
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "seq",
+    "tick",
+    "sim_time_ms",
+    "event_type"
+  ],
+  "title": "Event",
+  "type": "object"
+}

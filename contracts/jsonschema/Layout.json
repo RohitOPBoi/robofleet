@@ -1,0 +1,298 @@
+{
+  "$defs": {
+    "Cell": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "cell_type": {
+          "$ref": "#/$defs/CellType"
+        },
+        "flow": {
+          "$ref": "#/$defs/Flow",
+          "default": "BOTH"
+        },
+        "zone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zone"
+        },
+        "level_count": {
+          "default": 1,
+          "description": "Number of rack levels if SHELF",
+          "minimum": 1,
+          "title": "Level Count",
+          "type": "integer"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "pos",
+        "cell_type"
+      ],
+      "title": "Cell",
+      "type": "object"
+    },
+    "CellType": {
+      "enum": [
+        "WALL",
+        "FLOOR",
+        "SHELF",
+        "STATION",
+        "PACK",
+        "DISPATCH",
+        "SUPERVISOR_DESK",
+        "CHARGER",
+        "PARKING"
+      ],
+      "title": "CellType",
+      "type": "string"
+    },
+    "Charger": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "charger_id": {
+          "title": "Charger Id",
+          "type": "string"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "max_power_kw": {
+          "default": 3.0,
+          "title": "Max Power Kw",
+          "type": "number"
+        }
+      },
+      "required": [
+        "charger_id",
+        "pos"
+      ],
+      "title": "Charger",
+      "type": "object"
+    },
+    "Coordinate": {
+      "description": "2D grid coordinates (x East, y South).",
+      "properties": {
+        "x": {
+          "description": "Column index (East)",
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Row index (South)",
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Coordinate",
+      "type": "object"
+    },
+    "Flow": {
+      "description": "Flow direction allowed on walkable cells.",
+      "enum": [
+        "BOTH",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NS",
+        "EW"
+      ],
+      "title": "Flow",
+      "type": "string"
+    },
+    "Station": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "station_id": {
+          "title": "Station Id",
+          "type": "string"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "queue_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Queue Cells",
+          "type": "array"
+        },
+        "worker_count": {
+          "default": 1,
+          "title": "Worker Count",
+          "type": "integer"
+        },
+        "worker_kind": {
+          "default": "simulated_human",
+          "title": "Worker Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "station_id",
+        "pos"
+      ],
+      "title": "Station",
+      "type": "object"
+    },
+    "Zone": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "top_left": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "bottom_right": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "restricted": {
+          "default": false,
+          "title": "Restricted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "top_left",
+        "bottom_right"
+      ],
+      "title": "Zone",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "width": {
+      "description": "Grid width in cells",
+      "minimum": 1,
+      "title": "Width",
+      "type": "integer"
+    },
+    "height": {
+      "description": "Grid height in cells",
+      "minimum": 1,
+      "title": "Height",
+      "type": "integer"
+    },
+    "cell_size_m": {
+      "default": 0.8,
+      "description": "Physical size of cell in metres",
+      "minimum": 0.1,
+      "title": "Cell Size M",
+      "type": "number"
+    },
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/Cell"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "zones": {
+      "items": {
+        "$ref": "#/$defs/Zone"
+      },
+      "title": "Zones",
+      "type": "array"
+    },
+    "stations": {
+      "items": {
+        "$ref": "#/$defs/Station"
+      },
+      "title": "Stations",
+      "type": "array"
+    },
+    "chargers": {
+      "items": {
+        "$ref": "#/$defs/Charger"
+      },
+      "title": "Chargers",
+      "type": "array"
+    },
+    "parking_cells": {
+      "items": {
+        "$ref": "#/$defs/Coordinate"
+      },
+      "title": "Parking Cells",
+      "type": "array"
+    },
+    "dispatch_cells": {
+      "items": {
+        "$ref": "#/$defs/Coordinate"
+      },
+      "title": "Dispatch Cells",
+      "type": "array"
+    },
+    "supervisor_cells": {
+      "items": {
+        "$ref": "#/$defs/Coordinate"
+      },
+      "title": "Supervisor Cells",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "width",
+    "height"
+  ],
+  "title": "Layout",
+  "type": "object"
+}

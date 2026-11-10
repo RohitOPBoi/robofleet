@@ -1,0 +1,51 @@
+{
+  "ext": {},
+  "meta": {
+    "mode": "digital_twin",
+    "data_source": "Synthetic Demand Engine",
+    "robot_layer": "simulated",
+    "schema_version": "1.0.0"
+  },
+  "layout": {
+    "ext": {},
+    "name": "sample_layout",
+    "width": 5,
+    "height": 5,
+    "cell_size_m": 0.8,
+    "cells": [
+      {
+        "ext": {},
+        "pos": {
+          "x": 0,
+          "y": 0
+        },
+        "cell_type": "FLOOR",
+        "flow": "BOTH",
+        "zone": null,
+        "level_count": 1,
+        "metadata": {}
+      },
+      {
+        "ext": {},
+        "pos": {
+          "x": 1,
+          "y": 0
+        },
+        "cell_type": "SHELF",
+        "flow": "BOTH",
+        "zone": null,
+        "level_count": 1,
+        "metadata": {}
+      }
+    ],
+    "zones": [],
+    "stations": [],
+    "chargers": [],
+    "parking_cells": [],
+    "dispatch_cells": [],
+    "supervisor_cells": []
+  },
+  "catalogue": [],
+  "bins": [],
+  "config_summary": {}
+}

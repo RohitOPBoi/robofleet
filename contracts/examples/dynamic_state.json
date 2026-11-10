@@ -1,0 +1,35 @@
+{
+  "ext": {},
+  "meta": {
+    "mode": "digital_twin",
+    "data_source": "Synthetic Demand Engine",
+    "robot_layer": "simulated",
+    "schema_version": "1.0.0"
+  },
+  "tick": 0,
+  "sim_time_ms": 0,
+  "seq": 1,
+  "robots": [
+    {
+      "ext": {},
+      "robot_id": "R-001",
+      "kind": "standard_amr",
+      "cell": {
+        "x": 0,
+        "y": 0
+      },
+      "heading": "N",
+      "state": "IDLE",
+      "battery_pct": 100.0,
+      "motion": null,
+      "current_task_id": null,
+      "carrying": [],
+      "blocked_ticks": 0,
+      "fault": null
+    }
+  ],
+  "orders": [],
+  "alerts": [],
+  "blocked_cells": [],
+  "kpis": {}
+}

@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "OrderLine": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "sku_id": {
+          "title": "Sku Id",
+          "type": "string"
+        },
+        "quantity": {
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "picked_quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Picked Quantity",
+          "type": "integer"
+        },
+        "status": {
+          "default": "PENDING",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sku_id",
+        "quantity"
+      ],
+      "title": "OrderLine",
+      "type": "object"
+    },
+    "OrderStatus": {
+      "enum": [
+        "RECEIVED",
+        "QUEUED",
+        "PLANNED",
+        "RETRIEVING",
+        "AT_STATION",
+        "PICKING",
+        "CONSOLIDATING",
+        "PACKED",
+        "READY_FOR_DISPATCH",
+        "HANDED_OVER",
+        "CANCELLED",
+        "FAILED",
+        "FAILED_PARTIAL"
+      ],
+      "title": "OrderStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/OrderLine"
+      },
+      "title": "Lines",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/OrderStatus",
+      "default": "RECEIVED"
+    },
+    "priority": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "created_tick": {
+      "minimum": 0,
+      "title": "Created Tick",
+      "type": "integer"
+    },
+    "deadline_tick": {
+      "minimum": 0,
+      "title": "Deadline Tick",
+      "type": "integer"
+    },
+    "at_risk": {
+      "default": false,
+      "title": "At Risk",
+      "type": "boolean"
+    },
+    "assigned_station_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Assigned Station Id"
+    },
+    "sla_tier": {
+      "default": "standard",
+      "title": "Sla Tier",
+      "type": "string"
+    }
+  },
+  "required": [
+    "order_id",
+    "created_tick",
+    "deadline_tick"
+  ],
+  "title": "Order",
+  "type": "object"
+}

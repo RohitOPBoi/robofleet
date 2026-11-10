@@ -1,0 +1,1010 @@
+{
+  "$defs": {
+    "Alert": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/AlertSeverity"
+        },
+        "category": {
+          "$ref": "#/$defs/AlertCategory"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "entity_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Entity Ids",
+          "type": "array"
+        },
+        "cell": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Coordinate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "raised_tick": {
+          "minimum": 0,
+          "title": "Raised Tick",
+          "type": "integer"
+        },
+        "resolved_tick": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolved Tick"
+        },
+        "requires_human": {
+          "default": false,
+          "title": "Requires Human",
+          "type": "boolean"
+        },
+        "auto_resolved": {
+          "default": true,
+          "title": "Auto Resolved",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "alert_id",
+        "severity",
+        "category",
+        "message",
+        "raised_tick"
+      ],
+      "title": "Alert",
+      "type": "object"
+    },
+    "AlertCategory": {
+      "enum": [
+        "SAFETY",
+        "BATTERY",
+        "DEADLOCK",
+        "ROBOT",
+        "ORDER",
+        "STATION",
+        "INVENTORY"
+      ],
+      "title": "AlertCategory",
+      "type": "string"
+    },
+    "AlertSeverity": {
+      "enum": [
+        "INFO",
+        "WARN",
+        "CRITICAL"
+      ],
+      "title": "AlertSeverity",
+      "type": "string"
+    },
+    "Bin": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "bin_id": {
+          "title": "Bin Id",
+          "type": "string"
+        },
+        "cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "level": {
+          "description": "Rack shelf level (1 = bottom)",
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "sku_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sku Id"
+        },
+        "quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "capacity": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Capacity",
+          "type": "integer"
+        },
+        "max_weight_g": {
+          "default": 25000,
+          "minimum": 1000,
+          "title": "Max Weight G",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bin_id",
+        "cell",
+        "level"
+      ],
+      "title": "Bin",
+      "type": "object"
+    },
+    "Cell": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "cell_type": {
+          "$ref": "#/$defs/CellType"
+        },
+        "flow": {
+          "$ref": "#/$defs/Flow",
+          "default": "BOTH"
+        },
+        "zone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zone"
+        },
+        "level_count": {
+          "default": 1,
+          "description": "Number of rack levels if SHELF",
+          "minimum": 1,
+          "title": "Level Count",
+          "type": "integer"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "pos",
+        "cell_type"
+      ],
+      "title": "Cell",
+      "type": "object"
+    },
+    "CellType": {
+      "enum": [
+        "WALL",
+        "FLOOR",
+        "SHELF",
+        "STATION",
+        "PACK",
+        "DISPATCH",
+        "SUPERVISOR_DESK",
+        "CHARGER",
+        "PARKING"
+      ],
+      "title": "CellType",
+      "type": "string"
+    },
+    "Charger": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "charger_id": {
+          "title": "Charger Id",
+          "type": "string"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "max_power_kw": {
+          "default": 3.0,
+          "title": "Max Power Kw",
+          "type": "number"
+        }
+      },
+      "required": [
+        "charger_id",
+        "pos"
+      ],
+      "title": "Charger",
+      "type": "object"
+    },
+    "Coordinate": {
+      "description": "2D grid coordinates (x East, y South).",
+      "properties": {
+        "x": {
+          "description": "Column index (East)",
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Row index (South)",
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Coordinate",
+      "type": "object"
+    },
+    "DynamicState": {
+      "description": "Dynamic world state updated every tick or delta.",
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "meta": {
+          "$ref": "#/$defs/EnvironmentMeta"
+        },
+        "tick": {
+          "description": "Current discrete simulation tick",
+          "minimum": 0,
+          "title": "Tick",
+          "type": "integer"
+        },
+        "sim_time_ms": {
+          "description": "Current simulation time in ms",
+          "minimum": 0,
+          "title": "Sim Time Ms",
+          "type": "integer"
+        },
+        "seq": {
+          "description": "Highest emitted event sequence number",
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "robots": {
+          "items": {
+            "$ref": "#/$defs/Robot"
+          },
+          "title": "Robots",
+          "type": "array"
+        },
+        "orders": {
+          "items": {
+            "$ref": "#/$defs/Order"
+          },
+          "title": "Orders",
+          "type": "array"
+        },
+        "alerts": {
+          "items": {
+            "$ref": "#/$defs/Alert"
+          },
+          "title": "Alerts",
+          "type": "array"
+        },
+        "blocked_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Blocked Cells",
+          "type": "array"
+        },
+        "kpis": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Kpis",
+          "type": "object"
+        }
+      },
+      "required": [
+        "tick",
+        "sim_time_ms",
+        "seq"
+      ],
+      "title": "DynamicState",
+      "type": "object"
+    },
+    "EnvironmentMeta": {
+      "description": "Environment metadata surface required on all top-level payloads.",
+      "properties": {
+        "mode": {
+          "default": "digital_twin",
+          "description": "Operating mode, e.g. digital_twin",
+          "title": "Mode",
+          "type": "string"
+        },
+        "data_source": {
+          "default": "Synthetic Demand Engine",
+          "description": "Source of demand/order data",
+          "title": "Data Source",
+          "type": "string"
+        },
+        "robot_layer": {
+          "default": "simulated",
+          "description": "Underlying robot layer, e.g. simulated",
+          "title": "Robot Layer",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "description": "SemVer schema version",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "EnvironmentMeta",
+      "type": "object"
+    },
+    "Flow": {
+      "description": "Flow direction allowed on walkable cells.",
+      "enum": [
+        "BOTH",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NS",
+        "EW"
+      ],
+      "title": "Flow",
+      "type": "string"
+    },
+    "HazardClass": {
+      "enum": [
+        "none",
+        "chemical",
+        "flammable"
+      ],
+      "title": "HazardClass",
+      "type": "string"
+    },
+    "Heading": {
+      "description": "Grid orientation. N is y-1 (North), S is y+1 (South), E is x+1 (East), W is x-1 (West).",
+      "enum": [
+        "N",
+        "E",
+        "S",
+        "W"
+      ],
+      "title": "Heading",
+      "type": "string"
+    },
+    "Layout": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "width": {
+          "description": "Grid width in cells",
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Grid height in cells",
+          "minimum": 1,
+          "title": "Height",
+          "type": "integer"
+        },
+        "cell_size_m": {
+          "default": 0.8,
+          "description": "Physical size of cell in metres",
+          "minimum": 0.1,
+          "title": "Cell Size M",
+          "type": "number"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/Cell"
+          },
+          "title": "Cells",
+          "type": "array"
+        },
+        "zones": {
+          "items": {
+            "$ref": "#/$defs/Zone"
+          },
+          "title": "Zones",
+          "type": "array"
+        },
+        "stations": {
+          "items": {
+            "$ref": "#/$defs/Station"
+          },
+          "title": "Stations",
+          "type": "array"
+        },
+        "chargers": {
+          "items": {
+            "$ref": "#/$defs/Charger"
+          },
+          "title": "Chargers",
+          "type": "array"
+        },
+        "parking_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Parking Cells",
+          "type": "array"
+        },
+        "dispatch_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Dispatch Cells",
+          "type": "array"
+        },
+        "supervisor_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Supervisor Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "width",
+        "height"
+      ],
+      "title": "Layout",
+      "type": "object"
+    },
+    "MotionProgress": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "from_cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "to_cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "progress_permille": {
+          "description": "Movement progress in permille (0 to 1000)",
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Progress Permille",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_cell",
+        "to_cell",
+        "progress_permille"
+      ],
+      "title": "MotionProgress",
+      "type": "object"
+    },
+    "Order": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "order_id": {
+          "title": "Order Id",
+          "type": "string"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/OrderLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus",
+          "default": "RECEIVED"
+        },
+        "priority": {
+          "default": 1,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "created_tick": {
+          "minimum": 0,
+          "title": "Created Tick",
+          "type": "integer"
+        },
+        "deadline_tick": {
+          "minimum": 0,
+          "title": "Deadline Tick",
+          "type": "integer"
+        },
+        "at_risk": {
+          "default": false,
+          "title": "At Risk",
+          "type": "boolean"
+        },
+        "assigned_station_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assigned Station Id"
+        },
+        "sla_tier": {
+          "default": "standard",
+          "title": "Sla Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "order_id",
+        "created_tick",
+        "deadline_tick"
+      ],
+      "title": "Order",
+      "type": "object"
+    },
+    "OrderLine": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "sku_id": {
+          "title": "Sku Id",
+          "type": "string"
+        },
+        "quantity": {
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "picked_quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Picked Quantity",
+          "type": "integer"
+        },
+        "status": {
+          "default": "PENDING",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sku_id",
+        "quantity"
+      ],
+      "title": "OrderLine",
+      "type": "object"
+    },
+    "OrderStatus": {
+      "enum": [
+        "RECEIVED",
+        "QUEUED",
+        "PLANNED",
+        "RETRIEVING",
+        "AT_STATION",
+        "PICKING",
+        "CONSOLIDATING",
+        "PACKED",
+        "READY_FOR_DISPATCH",
+        "HANDED_OVER",
+        "CANCELLED",
+        "FAILED",
+        "FAILED_PARTIAL"
+      ],
+      "title": "OrderStatus",
+      "type": "string"
+    },
+    "Robot": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "robot_id": {
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "standard_amr",
+          "title": "Kind",
+          "type": "string"
+        },
+        "cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "heading": {
+          "$ref": "#/$defs/Heading",
+          "default": "N"
+        },
+        "state": {
+          "$ref": "#/$defs/RobotState",
+          "default": "IDLE"
+        },
+        "battery_pct": {
+          "default": 100.0,
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Battery Pct",
+          "type": "number"
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "current_task_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Task Id"
+        },
+        "carrying": {
+          "description": "IDs of totes/items carried",
+          "items": {
+            "type": "string"
+          },
+          "title": "Carrying",
+          "type": "array"
+        },
+        "blocked_ticks": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Blocked Ticks",
+          "type": "integer"
+        },
+        "fault": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fault"
+        }
+      },
+      "required": [
+        "robot_id",
+        "cell"
+      ],
+      "title": "Robot",
+      "type": "object"
+    },
+    "RobotState": {
+      "enum": [
+        "IDLE",
+        "MOVING",
+        "WAITING",
+        "CHARGING",
+        "UNAVAILABLE",
+        "PICKING",
+        "MAINTENANCE"
+      ],
+      "title": "RobotState",
+      "type": "string"
+    },
+    "Sku": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "sku_id": {
+          "title": "Sku Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "pack_size": {
+          "title": "Pack Size",
+          "type": "string"
+        },
+        "mrp_inr": {
+          "minimum": 0.0,
+          "title": "Mrp Inr",
+          "type": "number"
+        },
+        "popularity_rank": {
+          "minimum": 1,
+          "title": "Popularity Rank",
+          "type": "integer"
+        },
+        "size_class": {
+          "default": "medium",
+          "title": "Size Class",
+          "type": "string"
+        },
+        "fragile": {
+          "default": false,
+          "title": "Fragile",
+          "type": "boolean"
+        },
+        "handling_difficulty": {
+          "default": 1.0,
+          "maximum": 5.0,
+          "minimum": 0.5,
+          "title": "Handling Difficulty",
+          "type": "number"
+        },
+        "unit_weight_g": {
+          "minimum": 1,
+          "title": "Unit Weight G",
+          "type": "integer"
+        },
+        "dimensions_mm": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Dimensions Mm",
+          "type": "array"
+        },
+        "temperature_class": {
+          "$ref": "#/$defs/TemperatureClass",
+          "default": "ambient"
+        },
+        "shelf_life_days": {
+          "default": 180,
+          "minimum": 1,
+          "title": "Shelf Life Days",
+          "type": "integer"
+        },
+        "hazard_class": {
+          "$ref": "#/$defs/HazardClass",
+          "default": "none"
+        }
+      },
+      "required": [
+        "sku_id",
+        "name",
+        "category",
+        "pack_size",
+        "mrp_inr",
+        "popularity_rank",
+        "unit_weight_g"
+      ],
+      "title": "Sku",
+      "type": "object"
+    },
+    "StaticWorld": {
+      "description": "Static world state transmitted once or on full reload.",
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "meta": {
+          "$ref": "#/$defs/EnvironmentMeta"
+        },
+        "layout": {
+          "$ref": "#/$defs/Layout"
+        },
+        "catalogue": {
+          "items": {
+            "$ref": "#/$defs/Sku"
+          },
+          "title": "Catalogue",
+          "type": "array"
+        },
+        "bins": {
+          "items": {
+            "$ref": "#/$defs/Bin"
+          },
+          "title": "Bins",
+          "type": "array"
+        },
+        "config_summary": {
+          "additionalProperties": true,
+          "title": "Config Summary",
+          "type": "object"
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "title": "StaticWorld",
+      "type": "object"
+    },
+    "Station": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "station_id": {
+          "title": "Station Id",
+          "type": "string"
+        },
+        "pos": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "queue_cells": {
+          "items": {
+            "$ref": "#/$defs/Coordinate"
+          },
+          "title": "Queue Cells",
+          "type": "array"
+        },
+        "worker_count": {
+          "default": 1,
+          "title": "Worker Count",
+          "type": "integer"
+        },
+        "worker_kind": {
+          "default": "simulated_human",
+          "title": "Worker Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "station_id",
+        "pos"
+      ],
+      "title": "Station",
+      "type": "object"
+    },
+    "TemperatureClass": {
+      "enum": [
+        "ambient",
+        "chilled",
+        "frozen"
+      ],
+      "title": "TemperatureClass",
+      "type": "string"
+    },
+    "Zone": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "top_left": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "bottom_right": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "restricted": {
+          "default": false,
+          "title": "Restricted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "top_left",
+        "bottom_right"
+      ],
+      "title": "Zone",
+      "type": "object"
+    }
+  },
+  "description": "Combined static world and dynamic state.",
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "meta": {
+      "$ref": "#/$defs/EnvironmentMeta"
+    },
+    "static": {
+      "$ref": "#/$defs/StaticWorld"
+    },
+    "dynamic": {
+      "$ref": "#/$defs/DynamicState"
+    }
+  },
+  "required": [
+    "static",
+    "dynamic"
+  ],
+  "title": "WorldSnapshot",
+  "type": "object"
+}

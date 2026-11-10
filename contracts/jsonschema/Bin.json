@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "Coordinate": {
+      "description": "2D grid coordinates (x East, y South).",
+      "properties": {
+        "x": {
+          "description": "Column index (East)",
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Row index (South)",
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Coordinate",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "bin_id": {
+      "title": "Bin Id",
+      "type": "string"
+    },
+    "cell": {
+      "$ref": "#/$defs/Coordinate"
+    },
+    "level": {
+      "description": "Rack shelf level (1 = bottom)",
+      "minimum": 1,
+      "title": "Level",
+      "type": "integer"
+    },
+    "sku_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sku Id"
+    },
+    "quantity": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Quantity",
+      "type": "integer"
+    },
+    "capacity": {
+      "default": 50,
+      "minimum": 1,
+      "title": "Capacity",
+      "type": "integer"
+    },
+    "max_weight_g": {
+      "default": 25000,
+      "minimum": 1000,
+      "title": "Max Weight G",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "bin_id",
+    "cell",
+    "level"
+  ],
+  "title": "Bin",
+  "type": "object"
+}

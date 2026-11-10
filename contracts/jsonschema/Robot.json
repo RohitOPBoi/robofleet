@@ -1,0 +1,171 @@
+{
+  "$defs": {
+    "Coordinate": {
+      "description": "2D grid coordinates (x East, y South).",
+      "properties": {
+        "x": {
+          "description": "Column index (East)",
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Row index (South)",
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Coordinate",
+      "type": "object"
+    },
+    "Heading": {
+      "description": "Grid orientation. N is y-1 (North), S is y+1 (South), E is x+1 (East), W is x-1 (West).",
+      "enum": [
+        "N",
+        "E",
+        "S",
+        "W"
+      ],
+      "title": "Heading",
+      "type": "string"
+    },
+    "MotionProgress": {
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "from_cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "to_cell": {
+          "$ref": "#/$defs/Coordinate"
+        },
+        "progress_permille": {
+          "description": "Movement progress in permille (0 to 1000)",
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Progress Permille",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_cell",
+        "to_cell",
+        "progress_permille"
+      ],
+      "title": "MotionProgress",
+      "type": "object"
+    },
+    "RobotState": {
+      "enum": [
+        "IDLE",
+        "MOVING",
+        "WAITING",
+        "CHARGING",
+        "UNAVAILABLE",
+        "PICKING",
+        "MAINTENANCE"
+      ],
+      "title": "RobotState",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "ext": {
+      "additionalProperties": true,
+      "description": "Extension dictionary for backward compatibility",
+      "title": "Ext",
+      "type": "object"
+    },
+    "robot_id": {
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "kind": {
+      "default": "standard_amr",
+      "title": "Kind",
+      "type": "string"
+    },
+    "cell": {
+      "$ref": "#/$defs/Coordinate"
+    },
+    "heading": {
+      "$ref": "#/$defs/Heading",
+      "default": "N"
+    },
+    "state": {
+      "$ref": "#/$defs/RobotState",
+      "default": "IDLE"
+    },
+    "battery_pct": {
+      "default": 100.0,
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "title": "Battery Pct",
+      "type": "number"
+    },
+    "motion": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MotionProgress"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "current_task_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current Task Id"
+    },
+    "carrying": {
+      "description": "IDs of totes/items carried",
+      "items": {
+        "type": "string"
+      },
+      "title": "Carrying",
+      "type": "array"
+    },
+    "blocked_ticks": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Blocked Ticks",
+      "type": "integer"
+    },
+    "fault": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fault"
+    }
+  },
+  "required": [
+    "robot_id",
+    "cell"
+  ],
+  "title": "Robot",
+  "type": "object"
+}
