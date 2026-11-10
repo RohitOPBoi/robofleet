@@ -1,0 +1,51 @@
+# Diurnal Demand Profile - Evening Peak Benchmark
+profile_name: standard_evening
+base_arrival_rate_per_hour: 120.0
+
+hourly_multipliers:
+  0: 0.15
+  1: 0.10
+  2: 0.05
+  3: 0.05
+  4: 0.05
+  5: 0.10
+  6: 0.30
+  7: 0.70
+  8: 1.20
+  9: 1.40
+  10: 1.10
+  11: 0.90
+  12: 1.00
+  13: 0.85
+  14: 0.80
+  15: 0.95
+  16: 1.20
+  17: 1.60
+  18: 2.10
+  19: 2.40
+  20: 2.20
+  21: 1.80
+  22: 1.10
+  23: 0.50
+
+basket_size:
+  distribution: poisson
+  mean: 4.2
+  min: 1
+  max: 12
+
+sla_tier_probabilities:
+  standard: 0.75
+  express: 0.20
+  scheduled: 0.05
+
+overlays:
+  rain:
+    multiplier: 1.5
+    duration_hours: 2.0
+  match_night:
+    multiplier: 2.2
+    duration_hours: 3.0
+  rush:
+    multiplier: 3.0
+    duration_hours: 0.5
