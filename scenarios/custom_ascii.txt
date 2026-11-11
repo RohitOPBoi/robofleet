@@ -1,0 +1,12 @@
+// Sample Hand-drawn ASCII dark store layout
+// Legend: # Wall | . Floor | S Shelf | T Station | D Dispatch | K Supervisor | C Charger | A Parking | > ^ < v Flow
+####################
+#AAAAAAAAAAAA######
+#............C....#
+#..>>>>>>>>>>.....#
+#..SSSSSSSSSS#..C.#
+#..SSSSSSSSSS#....#
+#..<<<<<<<<<<...C.#
+#.................#
+#.K.DD.T..T.......#
+####################

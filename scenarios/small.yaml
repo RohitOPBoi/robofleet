@@ -1,0 +1,57 @@
+# Small Dark Store Scenario (10 Robots)
+scenario_name: small
+seed: 42
+robot_count: 10
+
+timing:
+  tick_hz: 10
+  max_duration_s: 1800
+
+physics:
+  cell_size_m: 0.8
+  robot_speed_mps: 1.2
+  turn_cost_ticks: 5
+
+battery:
+  drain_moving_per_tick: 0.01
+  drain_idle_per_tick: 0.001
+  charge_rate_per_tick: 0.05
+  low_battery_threshold: 20.0
+  critical_battery_threshold: 10.0
+  recharge_target_pct: 95.0
+
+layout:
+  preset: small
+  width: 20
+  height: 14
+  rack_rows: 2
+  rack_length: 10
+  rack_levels: 3
+  aisle_width: 2
+  cross_aisle_width: 2
+  station_count: 2
+  charger_count: 3
+  parking_count: 15
+  right_hand_traffic: true
+
+catalogue:
+  source_type: generated
+  sku_count: 600
+  empty_bin_pct: 5.0
+  top_k_popular_replicas: 20
+
+rules:
+  rules_dir: rules
+  hot_reload: true
+
+planner:
+  type: astar_flow
+  params:
+    replan_wait_ticks: 10
+    yield_wait_ticks: 30
+    deadlock_threshold_ticks: 60
+
+dispatcher:
+  type: wander
+  params:
+    dwell_ticks: 15
