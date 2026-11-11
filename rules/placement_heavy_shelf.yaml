@@ -1,0 +1,37 @@
+id: placement_heavy_on_top_shelf
+description: Deny placement of heavy items (> 5 kg) on the top shelf level for ergonomic and rack stability reasons
+scope: placement
+effect: deny
+severity: WARN
+version: "1.0.0"
+enabled: true
+when:
+  all:
+    - field: sku.unit_weight_g
+      op: ">"
+      value: 5000
+    - field: bin.level
+      op: ">="
+      value: 4
+tests:
+  - name: heavy_item_top_level_fails
+    context:
+      sku:
+        unit_weight_g: 6000
+      bin:
+        level: 4
+    expected_match: true
+  - name: heavy_item_bottom_level_passes
+    context:
+      sku:
+        unit_weight_g: 6000
+      bin:
+        level: 1
+    expected_match: false
+  - name: light_item_top_level_passes
+    context:
+      sku:
+        unit_weight_g: 500
+      bin:
+        level: 4
+    expected_match: false

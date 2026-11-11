@@ -1,0 +1,28 @@
+id: alert_low_battery
+description: Raise critical alert when robot battery falls below critical threshold
+scope: alert
+effect: alert
+severity: CRITICAL
+version: "1.0.0"
+enabled: true
+when:
+  all:
+    - field: robot.battery_pct
+      op: "<="
+      value: 10.0
+    - field: robot.state
+      op: "!="
+      value: CHARGING
+tests:
+  - name: critical_low_battery_triggers_alert
+    context:
+      robot:
+        battery_pct: 8.5
+        state: IDLE
+    expected_match: true
+  - name: critical_battery_on_charger_suppressed
+    context:
+      robot:
+        battery_pct: 8.5
+        state: CHARGING
+    expected_match: false

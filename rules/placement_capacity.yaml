@@ -1,0 +1,26 @@
+id: placement_bin_capacity_exceeded
+description: Deny placement if bin maximum item count or maximum weight limit is exceeded
+scope: placement
+effect: deny
+severity: WARN
+version: "1.0.0"
+enabled: true
+when:
+  any:
+    - field: planned_quantity
+      op: ">"
+      value: 100
+    - field: planned_weight_g
+      op: ">"
+      value: 25000
+tests:
+  - name: overload_weight_denied
+    context:
+      planned_quantity: 10
+      planned_weight_g: 30000
+    expected_match: true
+  - name: normal_load_allowed
+    context:
+      planned_quantity: 20
+      planned_weight_g: 10000
+    expected_match: false

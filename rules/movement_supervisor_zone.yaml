@@ -1,0 +1,30 @@
+id: movement_supervisor_keepout
+description: Deny AMR movement intents into the designated supervisor keep-out area
+scope: movement
+effect: deny
+severity: CRITICAL
+version: "1.0.0"
+enabled: true
+when:
+  all:
+    - field: target_cell.zone
+      op: "=="
+      value: supervisor_area
+    - field: robot.kind
+      op: "=="
+      value: standard_amr
+tests:
+  - name: amr_into_supervisor_zone_denied
+    context:
+      target_cell:
+        zone: supervisor_area
+      robot:
+        kind: standard_amr
+    expected_match: true
+  - name: amr_into_aisle_allowed
+    context:
+      target_cell:
+        zone: aisle_west
+      robot:
+        kind: standard_amr
+    expected_match: false

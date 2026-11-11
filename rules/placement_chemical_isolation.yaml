@@ -1,0 +1,30 @@
+id: placement_chemical_near_perishable
+description: Chemical cleaning agents must not be placed in adjacent bins to food and produce
+scope: placement
+effect: deny
+severity: CRITICAL
+version: "1.0.0"
+enabled: true
+when:
+  all:
+    - field: sku.hazard_class
+      op: "=="
+      value: chemical
+    - field: bin.adjacent_category
+      op: "in"
+      value: ["dairy", "bakery", "produce", "staples"]
+tests:
+  - name: bleach_near_dairy_denied
+    context:
+      sku:
+        hazard_class: chemical
+      bin:
+        adjacent_category: dairy
+    expected_match: true
+  - name: bleach_in_cleaning_aisle_allowed
+    context:
+      sku:
+        hazard_class: chemical
+      bin:
+        adjacent_category: cleaning
+    expected_match: false

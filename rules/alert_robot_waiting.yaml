@@ -1,0 +1,28 @@
+id: alert_robot_waiting_too_long
+description: Raise warning alert when a robot is blocked or waiting for longer than the configured threshold
+scope: alert
+effect: alert
+severity: WARN
+version: "1.0.0"
+enabled: true
+when:
+  all:
+    - field: robot.state
+      op: "=="
+      value: WAITING
+    - field: robot.blocked_ticks
+      op: ">"
+      value: 60
+tests:
+  - name: blocked_robot_triggers_alert
+    context:
+      robot:
+        state: WAITING
+        blocked_ticks: 75
+    expected_match: true
+  - name: newly_waiting_robot_no_alert
+    context:
+      robot:
+        state: WAITING
+        blocked_ticks: 10
+    expected_match: false

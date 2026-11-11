@@ -1,0 +1,38 @@
+id: placement_temperature_mismatch
+description: Deny placement of perishable items in mismatched temperature zones
+scope: placement
+effect: deny
+severity: CRITICAL
+version: "1.0.0"
+enabled: true
+when:
+  any:
+    - all:
+        - field: sku.temperature_class
+          op: "=="
+          value: chilled
+        - field: bin.temperature_zone
+          op: "!="
+          value: chilled
+    - all:
+        - field: sku.temperature_class
+          op: "=="
+          value: frozen
+        - field: bin.temperature_zone
+          op: "!="
+          value: frozen
+tests:
+  - name: chilled_in_ambient_fails
+    context:
+      sku:
+        temperature_class: chilled
+      bin:
+        temperature_zone: ambient
+    expected_match: true
+  - name: chilled_in_chilled_passes
+    context:
+      sku:
+        temperature_class: chilled
+      bin:
+        temperature_zone: chilled
+    expected_match: false
