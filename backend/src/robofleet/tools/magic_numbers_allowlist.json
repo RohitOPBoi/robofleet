@@ -1,0 +1,82 @@
+{
+  "_comment": "Allowlist for necessary mathematical, dimensional, or algorithmic constants with explanation per entry",
+  "backend/src/robofleet/sim/clock.py": [
+    {"value": 1000, "comment": "Milliseconds per second conversion factor"},
+    {"value": 10, "comment": "Fallback tick frequency in Hz"}
+  ],
+  "backend/src/robofleet/sim/safety.py": [
+    {"value": 1000, "comment": "Permille progress scaling (100% = 1000)"}
+  ],
+  "backend/src/robofleet/sim/planner.py": [
+    {"value": 1000, "comment": "Permille progress scaling (100% = 1000)"},
+    {"value": 10, "comment": "Default replan wait ticks"},
+    {"value": 30, "comment": "Default yield wait ticks"},
+    {"value": 60, "comment": "Default deadlock threshold ticks"}
+  ],
+  "backend/src/robofleet/sim/engine.py": [
+    {"value": 10, "comment": "Fallback replan wait ticks"},
+    {"value": 30, "comment": "Fallback yield wait ticks"},
+    {"value": 60, "comment": "Fallback deadlock threshold ticks"},
+    {"value": 20, "comment": "Fallback dwell ticks"},
+    {"value": 85.0, "comment": "Initial minimum battery percentage for AMR startup"},
+    {"value": 100.0, "comment": "Initial maximum battery percentage for AMR startup"}
+  ],
+  "backend/src/robofleet/sim/dispatcher.py": [
+    {"value": 20, "comment": "Fallback dwell ticks"}
+  ],
+  "backend/src/robofleet/sim/rng.py": [
+    {"value": 42, "comment": "Default root seed for deterministic simulation"}
+  ],
+  "backend/src/robofleet/sim/runner.py": [
+    {"value": 2, "comment": "Float decimal places for reporting"},
+    {"value": 3, "comment": "Float decimal places for reporting"},
+    {"value": 0.001, "comment": "Division by zero guard"}
+  ],
+  "backend/src/robofleet/layout/renderer.py": [
+    {"value": 2, "comment": "Border padding for ASCII diagram formatting"}
+  ],
+  "backend/src/robofleet/layout/ascii_loader.py": [
+    {"value": 0.8, "comment": "Default square cell dimension in metres"}
+  ],
+  "backend/src/robofleet/layout/generator.py": [
+    {"value": 0.8, "comment": "Default square cell dimension in metres"},
+    {"value": 2, "comment": "Layout geometric spacing for aisles and offsets"},
+    {"value": 3, "comment": "Layout geometric spacing for aisles and offsets"},
+    {"value": 4, "comment": "Layout geometric spacing for aisles and offsets"},
+    {"value": 5, "comment": "Layout geometric spacing for aisles and offsets"},
+    {"value": 6, "comment": "Layout geometric spacing for aisles and offsets"},
+    {"value": 7, "comment": "Layout geometric spacing for aisles and offsets"}
+  ],
+  "backend/src/robofleet/catalogue/generator.py": [
+    {"value": 0.20, "comment": "Dairy market category share"},
+    {"value": 0.18, "comment": "Produce market category share"},
+    {"value": 0.16, "comment": "Staples market category share"},
+    {"value": 0.14, "comment": "Snacks market category share"},
+    {"value": 0.12, "comment": "Bakery market category share"},
+    {"value": 0.10, "comment": "Beverages market category share"},
+    {"value": 0.06, "comment": "Household market category share"},
+    {"value": 0.04, "comment": "Frozen market category share"},
+    {"value": 50, "comment": "SKU catalog generation hashing modulus"},
+    {"value": 150, "comment": "Default packaging length in mm"},
+    {"value": 100, "comment": "Default packaging width/height in mm"},
+    {"value": 90, "comment": "Default shelf life in days"},
+    {"value": 3000, "comment": "Large size class weight threshold in grams"},
+    {"value": 300, "comment": "Small size class weight threshold in grams"},
+    {"value": 4000, "comment": "Heavy item handling difficulty threshold in grams"},
+    {"value": 1.5, "comment": "Fragile item handling difficulty factor"},
+    {"value": 2.0, "comment": "Heavy item handling difficulty factor"}
+  ],
+  "backend/src/robofleet/catalogue/slotting.py": [
+    {"value": 5000, "comment": "Ergonomic heavy item threshold in grams"},
+    {"value": 4, "comment": "Top shelf ergonomic level threshold"},
+    {"value": 15, "comment": "Minimum initial bin fill quantity"},
+    {"value": 50, "comment": "Default bin item capacity"},
+    {"value": 25000, "comment": "Default bin maximum weight in grams"},
+    {"value": 100.0, "comment": "Empty bin probability percentage base"}
+  ],
+  "backend/src/robofleet/sim/dispatcher.py": [
+    {"value": 2, "comment": "Charger approach staging offset in grid cells"},
+    {"value": 20, "comment": "Default fallback dwell ticks for wander dispatcher"},
+    {"value": 95.0, "comment": "Default fallback recharge target percentage"}
+  ]
+}
