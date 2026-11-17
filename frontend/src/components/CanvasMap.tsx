@@ -1,7 +1,25 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Eye, Layers, Maximize2, ShieldAlert, ZoomIn, ZoomOut } from "lucide-react";
-import type { Coordinate, Layout, Robot } from "../types/generated";
+import {
+  Eye,
+  Layers,
+  Maximize2,
+  RotateCcw,
+  ShieldAlert,
+  ZoomIn,
+  ZoomOut,
+  Crosshair,
+  Zap,
+} from "lucide-react";
+import type { Layout, Robot } from "../types/generated";
 import { setStore, useStore } from "../store/useStore";
+
+// Safe coordinate extractor helper
+const getPos = (obj: any): { x: number; y: number } => {
+  if (!obj) return { x: 0, y: 0 };
+  if (obj.pos) return { x: Number(obj.pos.x) || 0, y: Number(obj.pos.y) || 0 };
+  if (obj.coord) return { x: Number(obj.coord.x) || 0, y: Number(obj.coord.y) || 0 };
+  return { x: Number(obj.x) || 0, y: Number(obj.y) || 0 };
+};
 
 export const CanvasMap: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -21,73 +39,170 @@ export const CanvasMap: React.FC = () => {
   const [zoom, setZoom] = useState<number>(32); // Pixels per grid cell
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [hoveredRobot, setHoveredRobot] = useState<Robot | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const layout: Layout | undefined = staticWorld?.layout;
 
-  // Fit to screen callback
+  // Fit grid to screen callback
   const fitToScreen = useCallback(() => {
     if (!layout || !containerRef.current) return;
     const { clientWidth, clientHeight } = containerRef.current;
-    const padding = 60;
-    const availableWidth = clientWidth - padding;
-    const availableHeight = clientHeight - padding;
+    if (clientWidth <= 0 || clientHeight <= 0) return;
 
-    const cellWidth = availableWidth / layout.width;
-    const cellHeight = availableHeight / layout.height;
+    const padding = 48;
+    const availableWidth = Math.max(100, clientWidth - padding);
+    const availableHeight = Math.max(100, clientHeight - padding);
+
+    const cellWidth = availableWidth / (layout.width || 1);
+    const cellHeight = availableHeight / (layout.height || 1);
     const newZoom = Math.max(12, Math.min(cellWidth, cellHeight, 64));
 
-    const totalGridWidth = layout.width * newZoom;
-    const totalGridHeight = layout.height * newZoom;
+    const totalGridWidth = (layout.width || 1) * newZoom;
+    const totalGridHeight = (layout.height || 1) * newZoom;
 
     setZoom(newZoom);
     setPan({
-      x: (clientWidth - totalGridWidth) / 2,
-      y: (clientHeight - totalGridHeight) / 2,
+      x: Math.round((clientWidth - totalGridWidth) / 2),
+      y: Math.round((clientHeight - totalGridHeight) / 2),
     });
   }, [layout]);
 
-  // Initial fit
+  // Initial fit & ResizeObserver for dynamic screen changes
   useEffect(() => {
-    if (layout) {
+    if (!containerRef.current) return;
+
+    const ro = new ResizeObserver(() => {
       fitToScreen();
-    }
-  }, [layout, fitToScreen]);
+    });
+    ro.observe(containerRef.current);
 
-  // Handle Wheel Zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-    const newZoom = Math.min(Math.max(zoom * zoomFactor, 12), 120);
+    return () => ro.disconnect();
+  }, [fitToScreen]);
 
-    // Zoom toward mouse position
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const dx = mouseX - pan.x;
-      const dy = mouseY - pan.y;
+  // Center Zoom Helper (zooms into the exact center of viewport)
+  const zoomByFactor = useCallback((factor: number) => {
+    if (!containerRef.current) return;
+    const { clientWidth, clientHeight } = containerRef.current;
+    const cx = clientWidth / 2;
+    const cy = clientHeight / 2;
 
-      setPan({
-        x: mouseX - dx * (newZoom / zoom),
-        y: mouseY - dy * (newZoom / zoom),
+    setZoom((prevZoom) => {
+      const nextZoom = Math.min(Math.max(prevZoom * factor, 12), 120);
+      setPan((prevPan) => {
+        const dx = cx - prevPan.x;
+        const dy = cy - prevPan.y;
+        return {
+          x: Math.round(cx - dx * (nextZoom / prevZoom)),
+          y: Math.round(cy - dy * (nextZoom / prevZoom)),
+        };
       });
+      return nextZoom;
+    });
+  }, []);
+
+  // Quick Camera Presets
+  const focusPreset = (target: "all" | "stations" | "chargers") => {
+    if (!layout || !containerRef.current) return;
+    const { clientWidth, clientHeight } = containerRef.current;
+
+    if (target === "all") {
+      fitToScreen();
+    } else if (target === "stations") {
+      const newZoom = 44;
       setZoom(newZoom);
+      setPan({
+        x: Math.round(clientWidth / 2 - 10 * newZoom),
+        y: Math.round(clientHeight / 2 - 17 * newZoom),
+      });
+    } else if (target === "chargers") {
+      const newZoom = 44;
+      setZoom(newZoom);
+      setPan({
+        x: Math.round(clientWidth / 2 - 25 * newZoom),
+        y: Math.round(clientHeight / 2 - 5 * newZoom),
+      });
     }
   };
 
+  // Native non-passive Wheel Zoom to guarantee smooth zoom towards cursor
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      setZoom((prevZoom) => {
+        const nextZoom = Math.min(Math.max(prevZoom * zoomFactor, 12), 120);
+        setPan((prevPan) => {
+          const dx = mouseX - prevPan.x;
+          const dy = mouseY - prevPan.y;
+          return {
+            x: Math.round(mouseX - dx * (nextZoom / prevZoom)),
+            y: Math.round(mouseY - dy * (nextZoom / prevZoom)),
+          };
+        });
+        return nextZoom;
+      });
+    };
+
+    container.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => container.removeEventListener("wheel", onWheelNative);
+  }, []);
+
   // Dragging Pan Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return; // Only left click
+    if (e.button !== 0) return;
     setIsDragging(true);
     dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    }
+
     if (isDragging) {
       setPan({
         x: e.clientX - dragStartRef.current.x,
         y: e.clientY - dragStartRef.current.y,
       });
+      return;
+    }
+
+    // Hover detection over AMRs
+    if (rect && layout) {
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      let hovered: Robot | null = null;
+
+      for (const r of Object.values(robots)) {
+        let rx = r.coord?.x ?? 0;
+        let ry = r.coord?.y ?? 0;
+        if (r.motion?.from_coord && r.motion?.to_coord) {
+          const from = r.motion.from_coord;
+          const to = r.motion.to_coord;
+          const prog = Math.max(0, Math.min(1, r.motion.progress ?? 0));
+          rx = from.x + (to.x - from.x) * prog;
+          ry = from.y + (to.y - from.y) * prog;
+        }
+
+        const screenRx = pan.x + (rx + 0.5) * zoom;
+        const screenRy = pan.y + (ry + 0.5) * zoom;
+        const dist = Math.hypot(mouseX - screenRx, mouseY - screenRy);
+
+        if (dist < zoom * 0.55) {
+          hovered = r;
+          break;
+        }
+      }
+      setHoveredRobot(hovered);
     }
   };
 
@@ -109,7 +224,6 @@ export const CanvasMap: React.FC = () => {
     if (cellX < 0 || cellX >= layout.width || cellY < 0 || cellY >= layout.height) return;
 
     if (blockModeActive) {
-      // Toggle cell in selectedCellsToBlock
       const exists = selectedCellsToBlock.some((c) => c.x === cellX && c.y === cellY);
       const nextCells = exists
         ? selectedCellsToBlock.filter((c) => !(c.x === cellX && c.y === cellY))
@@ -122,8 +236,15 @@ export const CanvasMap: React.FC = () => {
     let clickedRobotId: string | null = null;
     const robotList = Object.values(robots);
     for (const r of robotList) {
-      const rx = r.motion ? r.motion.from_coord.x + (r.motion.to_coord.x - r.motion.from_coord.x) * r.motion.progress : r.coord.x;
-      const ry = r.motion ? r.motion.from_coord.y + (r.motion.to_coord.y - r.motion.from_coord.y) * r.motion.progress : r.coord.y;
+      let rx = r.coord?.x ?? 0;
+      let ry = r.coord?.y ?? 0;
+      if (r.motion?.from_coord && r.motion?.to_coord) {
+        const from = r.motion.from_coord;
+        const to = r.motion.to_coord;
+        const prog = Math.max(0, Math.min(1, r.motion.progress ?? 0));
+        rx = from.x + (to.x - from.x) * prog;
+        ry = from.y + (to.y - from.y) * prog;
+      }
 
       const screenRx = pan.x + (rx + 0.5) * zoom;
       const screenRy = pan.y + (ry + 0.5) * zoom;
@@ -138,186 +259,238 @@ export const CanvasMap: React.FC = () => {
     setStore({ selectedRobotId: clickedRobotId });
   };
 
-  // High-performance 60fps render loop
+  // High-performance 60fps render loop with sub-tick interpolation & robust cell drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !layout) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
     let animationFrameId: number;
 
     const render = () => {
-      // Resize canvas to client dimensions if needed
-      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-      }
+      try {
+        if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+        }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Cyber-dark industrial matte background
+        ctx.fillStyle = "#070A10";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.save();
-      ctx.translate(pan.x, pan.y);
+        ctx.save();
+        ctx.translate(pan.x, pan.y);
 
-      // 1. Draw Grid Background
-      ctx.strokeStyle = "rgba(55, 65, 81, 0.35)";
-      ctx.lineWidth = 1;
+        // 1. Draw Grid Cells Base
+        ctx.strokeStyle = "rgba(30, 41, 59, 0.45)";
+        ctx.lineWidth = 1;
 
-      // Draw floor cells
-      for (let y = 0; y < layout.height; y++) {
-        for (let x = 0; x < layout.width; x++) {
-          const px = x * zoom;
-          const py = y * zoom;
+        for (let y = 0; y < layout.height; y++) {
+          for (let x = 0; x < layout.width; x++) {
+            const px = x * zoom;
+            const py = y * zoom;
 
-          // Default floor
-          ctx.fillStyle = "#0F172A";
+            ctx.fillStyle = "#0C111D";
+            ctx.fillRect(px, py, zoom, zoom);
+            ctx.strokeRect(px, py, zoom, zoom);
+          }
+        }
+
+        // 2. Draw Layout Cells (Shelves, Chargers, Stations, Walls, Floors, Dispatch, Supervisor)
+        const cellsList = Array.isArray((layout as any).cells) ? (layout as any).cells : [];
+
+        cellsList.forEach((cell: any) => {
+          const p = getPos(cell);
+          const px = p.x * zoom;
+          const py = p.y * zoom;
+          const pad = Math.max(2, zoom * 0.12);
+          const ctype = cell.cell_type;
+
+          // Thermal Zones
+          if (activeOverlays.showZones && (cell.zone === "CHILLED" || cell.zone === "FROZEN")) {
+            ctx.fillStyle =
+              cell.zone === "CHILLED"
+                ? "rgba(59, 130, 246, 0.08)"
+                : "rgba(6, 182, 212, 0.12)";
+            ctx.fillRect(px, py, zoom, zoom);
+          }
+
+          if (ctype === "SHELF") {
+            // High-tech storage racks
+            let rackFill = "#161E2E";
+            let rackBorder = "#334155";
+            if (cell.zone === "CHILLED") {
+              rackFill = "#172554";
+              rackBorder = "#3B82F6";
+            } else if (cell.zone === "FROZEN") {
+              rackFill = "#083344";
+              rackBorder = "#06B6D4";
+            }
+
+            ctx.fillStyle = rackFill;
+            ctx.strokeStyle = rackBorder;
+            ctx.lineWidth = 1.2;
+            ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+
+            // Crossbeam
+            ctx.beginPath();
+            ctx.moveTo(px + pad, py + zoom / 2);
+            ctx.lineTo(px + zoom - pad, py + zoom / 2);
+            ctx.stroke();
+          } else if (ctype === "WALL") {
+            // Perimeter barrier
+            ctx.fillStyle = "#111827";
+            ctx.strokeStyle = "#1F2937";
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(px, py, zoom, zoom);
+            ctx.strokeRect(px, py, zoom, zoom);
+          } else if (ctype === "DISPATCH") {
+            // Dispatch Bay
+            ctx.fillStyle = "rgba(139, 92, 246, 0.15)";
+            ctx.strokeStyle = "#8B5CF6";
+            ctx.lineWidth = 1.2;
+            ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            if (zoom >= 24) {
+              ctx.fillStyle = "#C4B5FD";
+              ctx.font = `600 ${Math.max(7, zoom * 0.22)}px monospace`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText("BAY", px + zoom / 2, py + zoom / 2);
+            }
+          } else if (ctype === "SUPERVISOR_DESK") {
+            // Supervisor Desk
+            ctx.fillStyle = "rgba(245, 158, 11, 0.2)";
+            ctx.strokeStyle = "#F59E0B";
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            if (zoom >= 24) {
+              ctx.fillStyle = "#FDE68A";
+              ctx.font = `700 ${Math.max(7, zoom * 0.22)}px monospace`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText("DESK", px + zoom / 2, py + zoom / 2);
+            }
+          } else if (ctype === "PARKING") {
+            // Parking Spots
+            ctx.fillStyle = "rgba(59, 130, 246, 0.08)";
+            ctx.strokeStyle = "rgba(59, 130, 246, 0.3)";
+            ctx.lineWidth = 1;
+            ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+            if (zoom >= 22) {
+              ctx.fillStyle = "rgba(147, 197, 253, 0.5)";
+              ctx.font = `600 ${Math.max(7, zoom * 0.22)}px monospace`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText("P", px + zoom / 2, py + zoom / 2);
+            }
+          }
+        });
+
+        // 3. Draw Dedicated Chargers
+        const chargersList = Array.isArray((layout as any).chargers) ? (layout as any).chargers : [];
+        chargersList.forEach((ch: any) => {
+          const p = getPos(ch);
+          const px = p.x * zoom;
+          const py = p.y * zoom;
+          const pad = Math.max(2, zoom * 0.15);
+
+          ctx.fillStyle = "rgba(245, 158, 11, 0.14)";
+          ctx.strokeStyle = "#F59E0B";
+          ctx.lineWidth = 1.4;
+          ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+          ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+
+          // Lightning icon
+          const mx = px + zoom / 2;
+          const my = py + zoom / 2;
+          const s = Math.max(4, zoom * 0.22);
+          ctx.fillStyle = "#F59E0B";
+          ctx.beginPath();
+          ctx.moveTo(mx + s * 0.1, my - s);
+          ctx.lineTo(mx - s * 0.6, my + s * 0.1);
+          ctx.lineTo(mx - s * 0.05, my + s * 0.1);
+          ctx.lineTo(mx - s * 0.2, my + s);
+          ctx.lineTo(mx + s * 0.6, my - s * 0.1);
+          ctx.lineTo(mx + s * 0.05, my - s * 0.1);
+          ctx.closePath();
+          ctx.fill();
+        });
+
+        // 4. Draw Picking Stations
+        const stationsList = Array.isArray((layout as any).stations)
+          ? (layout as any).stations
+          : Array.isArray((layout as any).pick_stations)
+          ? (layout as any).pick_stations
+          : [];
+
+        stationsList.forEach((st: any) => {
+          const p = getPos(st);
+          const px = p.x * zoom;
+          const py = p.y * zoom;
+          const pad = Math.max(2, zoom * 0.1);
+
+          ctx.fillStyle = "rgba(16, 185, 129, 0.16)";
+          ctx.strokeStyle = "#10B981";
+          ctx.lineWidth = 1.5;
+          ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+          ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
+
+          ctx.fillStyle = "#10B981";
+          ctx.font = `700 ${Math.max(8, zoom * 0.26)}px monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const label = st.station_id ? st.station_id.replace("ST-", "S") : "PICK";
+          ctx.fillText(label, px + zoom / 2, py + zoom / 2);
+        });
+
+        // 5. Draw Blocked Cells (from layout or active selection)
+        selectedCellsToBlock.forEach((c) => {
+          const px = c.x * zoom;
+          const py = c.y * zoom;
+
+          ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
           ctx.fillRect(px, py, zoom, zoom);
+          ctx.strokeStyle = "#EF4444";
+          ctx.lineWidth = 1.4;
           ctx.strokeRect(px, py, zoom, zoom);
-        }
-      }
 
-      // 2. Temperature Zones Overlay
-      if (activeOverlays.showZones) {
-        for (let y = 0; y < layout.height; y++) {
-          for (let x = 0; x < layout.width; x++) {
-            const cell = layout.grid?.[y]?.[x];
-            if (cell) {
-              const px = x * zoom;
-              const py = y * zoom;
-              if (cell.zone === "CHILLED") {
-                ctx.fillStyle = "rgba(59, 130, 246, 0.08)";
-                ctx.fillRect(px, py, zoom, zoom);
-              } else if (cell.zone === "FROZEN") {
-                ctx.fillStyle = "rgba(6, 182, 212, 0.12)";
-                ctx.fillRect(px, py, zoom, zoom);
-              }
-            }
-          }
-        }
-      }
+          // Cross
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + zoom, py + zoom);
+          ctx.moveTo(px + zoom, py);
+          ctx.lineTo(px, py + zoom);
+          ctx.stroke();
+        });
 
-      // 3. Draw Shelves / Racks
-      layout.shelves.forEach((shelf) => {
-        const px = shelf.coord.x * zoom;
-        const py = shelf.coord.y * zoom;
-        const pad = Math.max(2, zoom * 0.12);
+        // 6. Draw Directional Flow Arrows if enabled
+        if (activeOverlays.showFlowArrows) {
+          ctx.strokeStyle = "rgba(100, 116, 139, 0.3)";
+          ctx.fillStyle = "rgba(100, 116, 139, 0.3)";
+          ctx.lineWidth = 1.2;
 
-        // Rack color based on zone
-        let rackColor = "#334155";
-        let rackBorder = "#475569";
-        if (shelf.zone === "CHILLED") {
-          rackColor = "#1E3A8A";
-          rackBorder = "#3B82F6";
-        } else if (shelf.zone === "FROZEN") {
-          rackColor = "#164E63";
-          rackBorder = "#06B6D4";
-        }
-
-        ctx.fillStyle = rackColor;
-        ctx.strokeStyle = rackBorder;
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-        ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-
-        // Rack crossbeams
-        ctx.beginPath();
-        ctx.moveTo(px + pad, py + zoom / 2);
-        ctx.lineTo(px + zoom - pad, py + zoom / 2);
-        ctx.stroke();
-      });
-
-      // 4. Draw Chargers
-      layout.chargers.forEach((ch) => {
-        const px = ch.coord.x * zoom;
-        const py = ch.coord.y * zoom;
-        const pad = Math.max(2, zoom * 0.15);
-
-        ctx.fillStyle = "rgba(245, 158, 11, 0.15)";
-        ctx.strokeStyle = "#F59E0B";
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-        ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-
-        // Bolt symbol
-        ctx.fillStyle = "#F59E0B";
-        ctx.font = `${Math.max(10, zoom * 0.45)}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("⚡", px + zoom / 2, py + zoom / 2);
-      });
-
-      // 5. Draw Pick Stations
-      layout.pick_stations.forEach((ps) => {
-        const px = ps.coord.x * zoom;
-        const py = ps.coord.y * zoom;
-        const pad = Math.max(2, zoom * 0.1);
-
-        ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
-        ctx.strokeStyle = "#10B981";
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-        ctx.strokeRect(px + pad, py + pad, zoom - 2 * pad, zoom - 2 * pad);
-
-        ctx.fillStyle = "#10B981";
-        ctx.font = `600 ${Math.max(8, zoom * 0.3)}px monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("PICK", px + zoom / 2, py + zoom / 2);
-      });
-
-      // 6. Draw Blocked Cells (from layout or active selection)
-      if (layout.grid) {
-        for (let y = 0; y < layout.height; y++) {
-          for (let x = 0; x < layout.width; x++) {
-            const cell = layout.grid[y]?.[x];
-            const isSelectedToBlock = selectedCellsToBlock.some((c) => c.x === x && c.y === y);
-
-            if (cell?.blocked || isSelectedToBlock) {
-              const px = x * zoom;
-              const py = y * zoom;
-
-              ctx.fillStyle = isSelectedToBlock ? "rgba(239, 68, 68, 0.4)" : "rgba(239, 68, 68, 0.25)";
-              ctx.fillRect(px, py, zoom, zoom);
-
-              ctx.strokeStyle = "#EF4444";
-              ctx.lineWidth = 1.5;
-              ctx.strokeRect(px, py, zoom, zoom);
-
-              // Diagonal cross-hatch
-              ctx.beginPath();
-              ctx.moveTo(px, py);
-              ctx.lineTo(px + zoom, py + zoom);
-              ctx.moveTo(px + zoom, py);
-              ctx.lineTo(px, py + zoom);
-              ctx.stroke();
-            }
-          }
-        }
-      }
-
-      // 7. Draw Flow Arrows if enabled
-      if (activeOverlays.showFlowArrows && layout.grid) {
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-        ctx.fillStyle = "rgba(148, 163, 184, 0.25)";
-        ctx.lineWidth = 1.5;
-
-        for (let y = 0; y < layout.height; y++) {
-          for (let x = 0; x < layout.width; x++) {
-            const cell = layout.grid[y]?.[x];
-            if (cell && cell.cell_type === "WALKWAY" && cell.aisle_dir) {
-              const cx = (x + 0.5) * zoom;
-              const cy = (y + 0.5) * zoom;
-              const arrowSize = zoom * 0.2;
+          cellsList.forEach((cell: any) => {
+            const flow = cell.flow || cell.aisle_dir;
+            if (flow && flow !== "BOTH" && cell.cell_type === "FLOOR") {
+              const p = getPos(cell);
+              const cx = (p.x + 0.5) * zoom;
+              const cy = (p.y + 0.5) * zoom;
+              const arrowSize = zoom * 0.18;
 
               ctx.save();
               ctx.translate(cx, cy);
 
               let angle = 0;
-              if (cell.aisle_dir === "EAST") angle = 0;
-              else if (cell.aisle_dir === "SOUTH") angle = Math.PI / 2;
-              else if (cell.aisle_dir === "WEST") angle = Math.PI;
-              else if (cell.aisle_dir === "NORTH") angle = -Math.PI / 2;
+              if (flow === "E" || flow === "EAST") angle = 0;
+              else if (flow === "S" || flow === "SOUTH") angle = Math.PI / 2;
+              else if (flow === "W" || flow === "WEST") angle = Math.PI;
+              else if (flow === "N" || flow === "NORTH") angle = -Math.PI / 2;
 
               ctx.rotate(angle);
               ctx.beginPath();
@@ -327,113 +500,197 @@ export const CanvasMap: React.FC = () => {
               ctx.stroke();
               ctx.restore();
             }
+          });
+        }
+
+        // 7. Draw Trajectory Line for Selected AMR
+        if (selectedRobotId && robots[selectedRobotId]) {
+          const sr = robots[selectedRobotId];
+          let rx = sr.coord?.x ?? 0;
+          let ry = sr.coord?.y ?? 0;
+          if (sr.motion?.from_coord && sr.motion?.to_coord) {
+            const from = sr.motion.from_coord;
+            const to = sr.motion.to_coord;
+            const prog = Math.max(0, Math.min(1, sr.motion.progress ?? 0));
+            rx = from.x + (to.x - from.x) * prog;
+            ry = from.y + (to.y - from.y) * prog;
+          }
+
+          const scx = (rx + 0.5) * zoom;
+          const scy = (ry + 0.5) * zoom;
+
+          if (sr.motion?.to_coord) {
+            const tcx = (sr.motion.to_coord.x + 0.5) * zoom;
+            const tcy = (sr.motion.to_coord.y + 0.5) * zoom;
+
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = "#00F0FF";
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(scx, scy);
+            ctx.lineTo(tcx, tcy);
+            ctx.stroke();
+            ctx.restore();
           }
         }
-      }
 
-      // 8. Draw AMRs (Robots) with Sub-Tick Progress Interpolation
-      const robotList = Object.values(robots);
-      robotList.forEach((r: Robot) => {
-        // Interpolate position
-        let rx = r.coord.x;
-        let ry = r.coord.y;
-        if (r.motion) {
-          const from = r.motion.from_coord;
-          const to = r.motion.to_coord;
-          const prog = Math.max(0, Math.min(1, r.motion.progress));
-          rx = from.x + (to.x - from.x) * prog;
-          ry = from.y + (to.y - from.y) * prog;
-        }
+        // 8. Draw AMRs (Robots) with Sub-Tick Progress Interpolation & GenZ Glow
+        const robotList = Object.values(robots);
+        robotList.forEach((r: Robot) => {
+          let rx = r.coord?.x ?? 0;
+          let ry = r.coord?.y ?? 0;
+          if (r.motion?.from_coord && r.motion?.to_coord) {
+            const from = r.motion.from_coord;
+            const to = r.motion.to_coord;
+            const prog = Math.max(0, Math.min(1, r.motion.progress ?? 0));
+            rx = from.x + (to.x - from.x) * prog;
+            ry = from.y + (to.y - from.y) * prog;
+          }
 
-        const cx = pan.x + (rx + 0.5) * zoom - pan.x;
-        const cy = pan.y + (ry + 0.5) * zoom - pan.y;
-        const radius = zoom * 0.38;
+          const cx = (rx + 0.5) * zoom;
+          const cy = (ry + 0.5) * zoom;
+          const radius = Math.max(7, zoom * 0.38);
 
-        const isSelected = selectedRobotId === r.id;
+          const isSelected = selectedRobotId === r.id;
+          const isHovered = hoveredRobot?.id === r.id;
 
-        // Selection ring
-        if (isSelected) {
+          // AMR State Status Accent Color
+          let amrBorder = "#10B981"; // Moving / Idle
+          let glowColor = "rgba(16, 185, 129, 0.4)";
+          if (r.state === "CHARGING") {
+            amrBorder = "#F59E0B";
+            glowColor = "rgba(245, 158, 11, 0.4)";
+          } else if (r.state === "FAULTED" || r.state === "EMERGENCY_STOPPED") {
+            amrBorder = "#EF4444";
+            glowColor = "rgba(239, 68, 68, 0.5)";
+          } else if (String(r.state).includes("PICK") || String(r.state).includes("DROP") || r.current_task_id) {
+            amrBorder = "#06B6D4";
+            glowColor = "rgba(6, 182, 212, 0.4)";
+          }
+
+          // Pulsing Target Reticle if selected
+          if (isSelected) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius + 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#00F0FF";
+            ctx.lineWidth = 2.2;
+            ctx.shadowColor = "#00F0FF";
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Hover highlight
+          if (isHovered && !isSelected) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius + 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+
+          // AMR Outer Chassis with cyber glow
+          ctx.save();
           ctx.beginPath();
-          ctx.arc(cx, cy, radius + 4, 0, 2 * Math.PI);
-          ctx.strokeStyle = "#38BDF8";
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
-        }
-
-        // AMR State base color
-        let amrColor = "#10B981"; // IDLE/MOVING default green
-        if (r.state === "CHARGING") amrColor = "#F59E0B";
-        else if (r.state === "FAULTED" || r.state === "EMERGENCY_STOPPED") amrColor = "#EF4444";
-        else if (r.state.startsWith("PICK") || r.state.startsWith("DROP")) amrColor = "#3B82F6";
-
-        // AMR Body circle
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = "#1E293B";
-        ctx.fill();
-        ctx.strokeStyle = amrColor;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Battery Ring Indicator
-        const batteryPct = Math.max(0, Math.min(100, r.battery_percent));
-        const batteryAngle = (batteryPct / 100) * 2 * Math.PI;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius - 3, -Math.PI / 2, -Math.PI / 2 + batteryAngle);
-        ctx.strokeStyle = batteryPct > 50 ? "#10B981" : batteryPct > 20 ? "#F59E0B" : "#EF4444";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Heading Arrow Indicator
-        const headingRad = (r.heading_deg * Math.PI) / 180;
-        const hLen = radius * 0.75;
-        const hx = cx + Math.cos(headingRad) * hLen;
-        const hy = cy + Math.sin(headingRad) * hLen;
-
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(hx, hy);
-        ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Robot ID Label if zoomed in enough or selected
-        if (zoom >= 24 || isSelected) {
-          ctx.fillStyle = "#F8FAFC";
-          ctx.font = `600 ${Math.max(9, zoom * 0.28)}px monospace`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          const shortId = r.id.replace("ROBOT-", "R");
-          ctx.fillText(shortId, cx, cy - radius - 5);
-        }
-      });
-
-      // 9. Draw Active Alerts on Map
-      alerts.forEach((alert) => {
-        if (alert.coord && !alert.cleared) {
-          const ax = (alert.coord.x + 0.5) * zoom;
-          const ay = (alert.coord.y + 0.5) * zoom;
-
-          ctx.beginPath();
-          ctx.arc(ax, ay, zoom * 0.35, 0, 2 * Math.PI);
-          ctx.fillStyle = alert.severity === "CRITICAL" ? "rgba(239, 68, 68, 0.4)" : "rgba(245, 158, 11, 0.4)";
+          ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = "#0F172A";
+          ctx.shadowColor = glowColor;
+          ctx.shadowBlur = 6;
           ctx.fill();
+          ctx.strokeStyle = amrBorder;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
 
-          ctx.strokeStyle = alert.severity === "CRITICAL" ? "#EF4444" : "#F59E0B";
+          // Circular Battery Percentage Gauge Arc
+          const batteryPct = Math.max(0, Math.min(100, r.battery_percent ?? 100));
+          const batteryAngle = (batteryPct / 100) * 2 * Math.PI;
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.max(3, radius - 3.2), -Math.PI / 2, -Math.PI / 2 + batteryAngle);
+          ctx.strokeStyle = batteryPct > 50 ? "#10B981" : batteryPct > 20 ? "#F59E0B" : "#EF4444";
           ctx.lineWidth = 2;
           ctx.stroke();
 
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = `${Math.max(10, zoom * 0.4)}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("⚠️", ax, ay);
-        }
-      });
+          // Heading Laser Indicator
+          const headingRad = ((r.heading_deg ?? 0) * Math.PI) / 180;
+          const hLen = radius * 0.8;
+          const hx = cx + Math.cos(headingRad) * hLen;
+          const hy = cy + Math.sin(headingRad) * hLen;
 
-      ctx.restore();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(hx, hy);
+          ctx.strokeStyle = "#FFFFFF";
+          ctx.lineWidth = 2;
+          ctx.stroke();
 
-      animationFrameId = requestAnimationFrame(render);
+          // Carrying Tote indicator (Vibrant electric purple box)
+          if (r.current_task_id) {
+            const bx = cx + radius * 0.55;
+            const by = cy - radius * 0.55;
+            ctx.save();
+            ctx.fillStyle = "#A855F7";
+            ctx.shadowColor = "#A855F7";
+            ctx.shadowBlur = 4;
+            ctx.fillRect(bx - 4, by - 4, 8, 8);
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(bx - 4, by - 4, 8, 8);
+            ctx.restore();
+          }
+
+          // AMR Short ID Badge
+          if (zoom >= 20 || isSelected) {
+            ctx.fillStyle = "#F8FAFC";
+            ctx.font = `700 ${Math.max(9, zoom * 0.28)}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const shortId = r.id.replace("ROBOT-", "R-");
+            ctx.fillText(shortId, cx, cy - radius - 5);
+          }
+        });
+
+        // 9. Draw Active Alerts on Map
+        alerts.forEach((alert) => {
+          if (alert.coord && !alert.cleared) {
+            const ax = (alert.coord.x + 0.5) * zoom;
+            const ay = (alert.coord.y + 0.5) * zoom;
+            const s = Math.max(5, zoom * 0.3);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(ax, ay, s + 4, 0, 2 * Math.PI);
+            ctx.fillStyle =
+              alert.severity === "CRITICAL" ? "rgba(239, 68, 68, 0.3)" : "rgba(245, 158, 11, 0.3)";
+            ctx.shadowColor = alert.severity === "CRITICAL" ? "#EF4444" : "#F59E0B";
+            ctx.shadowBlur = 8;
+            ctx.fill();
+
+            // Triangle
+            ctx.beginPath();
+            ctx.moveTo(ax, ay - s);
+            ctx.lineTo(ax + s, ay + s);
+            ctx.lineTo(ax - s, ay + s);
+            ctx.closePath();
+            ctx.fillStyle = alert.severity === "CRITICAL" ? "#EF4444" : "#F59E0B";
+            ctx.fill();
+
+            // Exclamation mark
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(ax - 0.75, ay - s * 0.35, 1.5, s * 0.6);
+            ctx.fillRect(ax - 0.75, ay + s * 0.55, 1.5, 1.5);
+            ctx.restore();
+          }
+        });
+
+        ctx.restore();
+      } catch (err) {
+        console.error("Canvas render error caught:", err);
+      } finally {
+        animationFrameId = requestAnimationFrame(render);
+      }
     };
 
     animationFrameId = requestAnimationFrame(render);
@@ -445,6 +702,7 @@ export const CanvasMap: React.FC = () => {
     pan,
     zoom,
     selectedRobotId,
+    hoveredRobot,
     activeOverlays,
     blockModeActive,
     selectedCellsToBlock,
@@ -453,40 +711,109 @@ export const CanvasMap: React.FC = () => {
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 h-full bg-gray-950 overflow-hidden select-none cursor-grab active:cursor-grabbing"
+      className="relative flex-1 h-full w-full bg-gray-950 overflow-hidden select-none cursor-grab active:cursor-grabbing"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
       onClick={handleClick}
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
 
-      {/* Floating Map Controls */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-1.5 bg-gray-900/90 border border-gray-800 backdrop-blur-md rounded-lg p-1 text-xs shadow-lg z-20">
-        <button
-          onClick={() => setZoom((z) => Math.min(z * 1.25, 120))}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-          title="Zoom In"
+      {/* Floating AMR Hover Tooltip */}
+      {hoveredRobot && (
+        <div
+          className="absolute pointer-events-none z-30 px-2.5 py-1.5 rounded-lg bg-gray-950/95 border border-cyan-500/50 shadow-2xl backdrop-blur-md text-[11px] font-mono text-gray-200"
+          style={{
+            left: Math.min(mousePos.x + 16, (containerRef.current?.clientWidth ?? 800) - 160),
+            top: Math.max(mousePos.y - 48, 16),
+          }}
         >
-          <ZoomIn className="w-4 h-4" />
-        </button>
+          <div className="flex items-center gap-1.5 font-bold text-cyan-400">
+            <span>{hoveredRobot.id}</span>
+            <span className="text-[9px] px-1 rounded bg-gray-800 text-gray-300 font-normal">
+              {hoveredRobot.state}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-gray-400 text-[10px] mt-0.5">
+            <span>⚡ {Math.round(hoveredRobot.battery_percent ?? 100)}%</span>
+            <span>📍 ({hoveredRobot.coord?.x ?? 0}, {hoveredRobot.coord?.y ?? 0})</span>
+            {hoveredRobot.current_task_id && <span className="text-purple-400">📦 Tote Loaded</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Modern GenZ Floating HUD Controls */}
+      <div
+        className="absolute bottom-4 left-4 flex items-center gap-1.5 bg-gray-900/90 border border-white/10 backdrop-blur-xl rounded-xl p-1.5 text-xs shadow-2xl z-20"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-0.5 bg-gray-950/60 rounded-lg p-0.5 border border-white/5">
+          <button
+            type="button"
+            onClick={() => zoomByFactor(1.25)}
+            className="p-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-md transition active:scale-95 cursor-pointer"
+            title="Zoom in (+)"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomByFactor(0.8)}
+            className="p-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-md transition active:scale-95 cursor-pointer"
+            title="Zoom out (-)"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={fitToScreen}
+            className="p-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-md transition active:scale-95 cursor-pointer"
+            title="Fit warehouse to screen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setZoom(32);
+              setPan({ x: 40, y: 40 });
+            }}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition active:scale-95 cursor-pointer"
+            title="Reset pan & zoom"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="h-4 w-px bg-white/10" />
+
+        {/* Camera Preset Quick Pills */}
+        <div className="hidden sm:flex items-center gap-1 font-mono text-[10px]">
+          <button
+            type="button"
+            onClick={() => focusPreset("stations")}
+            className="px-2 py-1 rounded bg-gray-950/60 hover:bg-emerald-950/60 text-gray-400 hover:text-emerald-300 border border-white/5 hover:border-emerald-700/50 transition cursor-pointer"
+            title="Center view on picking stations"
+          >
+            Stations
+          </button>
+          <button
+            type="button"
+            onClick={() => focusPreset("chargers")}
+            className="px-2 py-1 rounded bg-gray-950/60 hover:bg-amber-950/60 text-gray-400 hover:text-amber-300 border border-white/5 hover:border-amber-700/50 transition cursor-pointer"
+            title="Center view on charger bank"
+          >
+            Chargers
+          </button>
+        </div>
+
+        <div className="h-4 w-px bg-white/10" />
+
+        {/* Overlays */}
         <button
-          onClick={() => setZoom((z) => Math.max(z * 0.8, 12))}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <button
-          onClick={fitToScreen}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-          title="Fit to Screen"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
-        <div className="h-4 w-px bg-gray-800" />
-        <button
+          type="button"
           onClick={() =>
             setStore({
               activeOverlays: {
@@ -495,14 +822,17 @@ export const CanvasMap: React.FC = () => {
               },
             })
           }
-          className={`p-1.5 rounded transition ${
-            activeOverlays.showFlowArrows ? "bg-blue-600/30 text-blue-400" : "text-gray-400 hover:text-white"
+          className={`p-1.5 rounded-lg transition active:scale-95 cursor-pointer ${
+            activeOverlays.showFlowArrows
+              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+              : "text-gray-400 hover:text-white hover:bg-white/5"
           }`}
-          title="Toggle Aisle Flow Arrows"
+          title="Toggle aisle flow arrows"
         >
           <Eye className="w-4 h-4" />
         </button>
         <button
+          type="button"
           onClick={() =>
             setStore({
               activeOverlays: {
@@ -511,47 +841,62 @@ export const CanvasMap: React.FC = () => {
               },
             })
           }
-          className={`p-1.5 rounded transition ${
-            activeOverlays.showZones ? "bg-blue-600/30 text-blue-400" : "text-gray-400 hover:text-white"
+          className={`p-1.5 rounded-lg transition active:scale-95 cursor-pointer ${
+            activeOverlays.showZones
+              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+              : "text-gray-400 hover:text-white hover:bg-white/5"
           }`}
-          title="Toggle Temperature Zones"
+          title="Toggle temperature zones"
         >
           <Layers className="w-4 h-4" />
         </button>
+
+        <div className="h-4 w-px bg-white/10" />
+
+        {/* Block Tool */}
         <button
+          type="button"
           onClick={() =>
             setStore({
               blockModeActive: !blockModeActive,
               selectedCellsToBlock: [],
             })
           }
-          className={`flex items-center gap-1 px-2 py-1 rounded transition text-xs font-medium ${
-            blockModeActive ? "bg-red-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition font-medium text-xs active:scale-95 cursor-pointer ${
+            blockModeActive
+              ? "bg-red-600 text-white shadow-lg shadow-red-600/30 font-bold"
+              : "text-gray-300 hover:text-white hover:bg-white/5 border border-white/5"
           }`}
-          title="Toggle Block Cell Tool (Click cells to block)"
+          title="Toggle block cell tool (Click grid cells to block)"
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          <span>Block Tool</span>
+          <span>Block</span>
         </button>
       </div>
 
       {/* Block Tool Action Bar */}
       {blockModeActive && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-950/90 border border-red-800 backdrop-blur-md rounded-lg px-4 py-2 flex items-center gap-3 text-xs shadow-xl z-20">
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-950/95 border border-red-800/80 backdrop-blur-xl rounded-xl px-4 py-2 flex items-center gap-3 text-xs shadow-2xl z-20 animate-in fade-in slide-in-from-top-2"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           <ShieldAlert className="w-4 h-4 text-red-400" />
           <span className="text-red-200">
-            Click cells to select. <strong>{selectedCellsToBlock.length}</strong> cells selected.
+            Click cells on grid. <strong>{selectedCellsToBlock.length}</strong> selected.
           </span>
           <button
+            type="button"
             onClick={() => setStore({ isEStopModalOpen: true })}
             disabled={selectedCellsToBlock.length === 0}
-            className="px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-medium rounded transition"
+            className="px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-semibold rounded-lg transition cursor-pointer"
           >
-            Block Selected
+            Block selected
           </button>
           <button
+            type="button"
             onClick={() => setStore({ blockModeActive: false, selectedCellsToBlock: [] })}
-            className="px-2 py-1 text-gray-400 hover:text-white transition"
+            className="px-2 py-1 text-gray-400 hover:text-white transition cursor-pointer"
           >
             Cancel
           </button>

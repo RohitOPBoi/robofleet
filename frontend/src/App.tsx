@@ -7,73 +7,49 @@ import { EventFeed } from "./components/EventFeed";
 import { SelectedRobotPanel } from "./components/SelectedRobotPanel";
 import { EnvironmentModal } from "./components/EnvironmentModal";
 import { ControlModals } from "./components/ControlModals";
-import { defaultPanelRegistry } from "./panels/registry";
 import { pauseSimulation, resumeSimulation, setSimulationSpeed } from "./services/api";
 import { setStore, useStore, useWebSocketConnection } from "./store/useStore";
-
-// Initialize CA-9 Panel Registry
-defaultPanelRegistry.register({
-  id: "order-board",
-  title: "Order Board",
-  position: "left",
-  defaultOpen: true,
-  order: 1,
-  component: OrderBoard,
-});
-
-defaultPanelRegistry.register({
-  id: "alert-drawer",
-  title: "Alert Drawer",
-  position: "right",
-  defaultOpen: true,
-  order: 1,
-  component: AlertDrawer,
-});
-
-defaultPanelRegistry.register({
-  id: "event-feed",
-  title: "Event Feed",
-  position: "right",
-  defaultOpen: true,
-  order: 2,
-  component: EventFeed,
-});
 
 export const App: React.FC = () => {
   // Establish persistent WebSocket connection & reactive state
   useWebSocketConnection();
-  const { isPaused } = useStore();
+  const { isPaused, leftPanelOpen, rightPanelOpen, activeRightTab, alerts } = useStore();
 
-  // Keyboard shortcuts (P2-A13)
+  const activeAlertCount = alerts.filter((a) => !a.cleared).length;
+
+  // Global Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
 
       if (e.code === "Space") {
         e.preventDefault();
+        const nextPaused = !isPaused;
+        setStore({ isPaused: nextPaused });
         try {
-          if (isPaused) {
-            await resumeSimulation();
-            setStore({ isPaused: false });
-          } else {
+          if (nextPaused) {
             await pauseSimulation();
-            setStore({ isPaused: true });
+          } else {
+            await resumeSimulation();
           }
         } catch (err) {
           console.error(err);
         }
       } else if (e.code === "Digit1") {
-        await setSimulationSpeed(1.0);
         setStore({ speedMultiplier: 1.0 });
+        await setSimulationSpeed(1.0);
       } else if (e.code === "Digit2") {
-        await setSimulationSpeed(2.0);
         setStore({ speedMultiplier: 2.0 });
+        await setSimulationSpeed(2.0);
       } else if (e.code === "Digit5") {
-        await setSimulationSpeed(5.0);
         setStore({ speedMultiplier: 5.0 });
+        await setSimulationSpeed(5.0);
+      } else if (e.code === "BracketLeft") {
+        setStore({ leftPanelOpen: !leftPanelOpen });
+      } else if (e.code === "BracketRight") {
+        setStore({ rightPanelOpen: !rightPanelOpen });
       } else if (e.key === "Escape") {
         setStore({
           isEnvironmentModalOpen: false,
@@ -87,38 +63,73 @@ export const App: React.FC = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPaused]);
-
-  // Retrieve panels from CA-9 registry
-  const leftPanels = defaultPanelRegistry.list("left");
-  const rightPanels = defaultPanelRegistry.list("right");
+  }, [isPaused, leftPanelOpen, rightPanelOpen]);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950 text-gray-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950 text-gray-100 font-sans select-none">
       {/* Top Bar with KPIs & Controls */}
       <TopBar />
 
       {/* Main Operations Canvas Area */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Side: Registered Left Panels */}
-        {leftPanels.map((p) => {
-          const Comp = p.component;
-          return <Comp key={p.id} />;
-        })}
+      <div className="flex flex-1 overflow-hidden relative min-h-0">
+        {/* Left Side: Order Board (Collapsible) */}
+        {leftPanelOpen && (
+          <aside className="w-72 max-w-[288px] flex-shrink-0 h-full border-r border-gray-800 bg-gray-900/95 flex flex-col z-20 overflow-hidden">
+            <OrderBoard />
+          </aside>
+        )}
 
         {/* Center: 2D Live Operations Canvas */}
-        <div className="flex-1 h-full relative overflow-hidden">
+        <main className="flex-1 min-w-0 h-full relative overflow-hidden bg-gray-950">
           <CanvasMap />
           <SelectedRobotPanel />
-        </div>
+        </main>
 
-        {/* Right Side: Registered Right Panels */}
-        <div className="w-88 h-full border-l border-gray-800 bg-gray-900/95 flex flex-col z-20">
-          {rightPanels.map((p) => {
-            const Comp = p.component;
-            return <Comp key={p.id} />;
-          })}
-        </div>
+        {/* Right Side: Tabbed Alerts & Event Feed (Collapsible) */}
+        {rightPanelOpen && (
+          <aside className="w-72 max-w-[288px] flex-shrink-0 h-full border-l border-gray-800 bg-gray-900/95 flex flex-col z-20 overflow-hidden">
+            {/* Right Panel Tab Switcher */}
+            <div className="px-3 pt-2.5 pb-2 border-b border-gray-800 bg-gray-950/70 flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setStore({ activeRightTab: "alerts" })}
+                className={`flex-1 py-1.5 px-2 rounded-md font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  activeRightTab === "alerts"
+                    ? "bg-gray-800 text-white shadow-sm"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-gray-900"
+                }`}
+              >
+                <span>Alerts</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeAlertCount > 0
+                      ? "bg-amber-950 text-amber-300 border border-amber-800/80 font-bold"
+                      : "bg-gray-700 text-gray-400"
+                  }`}
+                >
+                  {activeAlertCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStore({ activeRightTab: "events" })}
+                className={`flex-1 py-1.5 px-2 rounded-md font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  activeRightTab === "events"
+                    ? "bg-gray-800 text-white shadow-sm"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-gray-900"
+                }`}
+              >
+                <span>Event feed</span>
+              </button>
+            </div>
+
+            {/* Tab Body */}
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              {activeRightTab === "alerts" ? <AlertDrawer /> : <EventFeed />}
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Modals & Dialogs */}
