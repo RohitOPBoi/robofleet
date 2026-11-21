@@ -1,0 +1,23 @@
+# Chaos Scenario: Aisle Blockage Peak
+name: aisle_blockage_peak
+description: "Obstruction of critical picking aisle walkway cells during heavy traffic."
+duration_ticks: 600
+demand_overlay: rush
+
+scheduled_faults:
+  - tick: 60
+    fault_type: aisle_blocked
+    target_id: aisle-1
+    duration_ticks: 250
+    severity: MEDIUM
+    params:
+      cells:
+        - [6, 8]
+        - [6, 9]
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 75.0
+  max_recovery_ticks: 300
+  max_unverified_picks: 0

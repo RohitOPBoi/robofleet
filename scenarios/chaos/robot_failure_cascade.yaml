@@ -1,0 +1,29 @@
+# Chaos Scenario: Robot Failure Cascade
+name: robot_failure_cascade
+description: "Simulates progressive hardware breakdowns across multiple AMRs during active fulfillment."
+duration_ticks: 600
+demand_overlay: null
+
+scheduled_faults:
+  - tick: 50
+    fault_type: robot_breakdown
+    target_id: R-002
+    duration_ticks: 120
+    severity: CRITICAL
+  - tick: 120
+    fault_type: robot_breakdown
+    target_id: R-005
+    duration_ticks: 150
+    severity: CRITICAL
+  - tick: 220
+    fault_type: robot_breakdown
+    target_id: R-008
+    duration_ticks: 100
+    severity: CRITICAL
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 70.0
+  max_recovery_ticks: 200
+  max_unverified_picks: 0

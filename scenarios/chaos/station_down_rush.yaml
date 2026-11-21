@@ -1,0 +1,19 @@
+# Chaos Scenario: Station Down Rush
+name: station_down_rush
+description: "Picking station jam and conveyor offline during rush hour demand."
+duration_ticks: 600
+demand_overlay: rush
+
+scheduled_faults:
+  - tick: 80
+    fault_type: station_offline
+    target_id: STATION-1
+    duration_ticks: 200
+    severity: CRITICAL
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 70.0
+  max_recovery_ticks: 250
+  max_unverified_picks: 0

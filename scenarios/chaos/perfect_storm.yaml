@@ -1,0 +1,40 @@
+# Chaos Scenario: Perfect Storm
+name: perfect_storm
+description: "Compound catastrophe: AMR breakdown, blocked aisle, station slowdown, and urgent order burst."
+duration_ticks: 700
+demand_overlay: rush
+
+scheduled_faults:
+  - tick: 40
+    fault_type: robot_breakdown
+    target_id: R-001
+    duration_ticks: 180
+    severity: CRITICAL
+  - tick: 70
+    fault_type: aisle_blocked
+    target_id: aisle-1
+    duration_ticks: 220
+    severity: MEDIUM
+    params:
+      cells:
+        - [6, 8]
+        - [6, 9]
+  - tick: 100
+    fault_type: station_slowdown
+    target_id: STATION-1
+    duration_ticks: 200
+    severity: MEDIUM
+  - tick: 130
+    fault_type: urgent_order_burst
+    target_id: system
+    duration_ticks: 150
+    severity: HIGH
+    params:
+      order_count: 8
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 60.0
+  max_recovery_ticks: 350
+  max_unverified_picks: 0

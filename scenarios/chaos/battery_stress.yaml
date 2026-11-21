@@ -1,0 +1,21 @@
+# Chaos Scenario: Battery Stress
+name: battery_stress
+description: "Accelerated thermal drain inducing battery triage across the active AMR fleet."
+duration_ticks: 600
+demand_overlay: null
+
+scheduled_faults:
+  - tick: 50
+    fault_type: battery_cascade
+    target_id: fleet
+    duration_ticks: 200
+    severity: HIGH
+    params:
+      drain_multiplier: 4.0
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 65.0
+  max_recovery_ticks: 250
+  max_unverified_picks: 0

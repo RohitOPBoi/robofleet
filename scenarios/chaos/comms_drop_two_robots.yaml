@@ -1,0 +1,24 @@
+# Chaos Scenario: Communications Drop Two Robots
+name: comms_drop_two_robots
+description: "Simultaneous radio packet loss for two active AMRs in high-traffic corridors."
+duration_ticks: 500
+demand_overlay: null
+
+scheduled_faults:
+  - tick: 60
+    fault_type: robot_comms_drop
+    target_id: R-003
+    duration_ticks: 120
+    severity: HIGH
+  - tick: 60
+    fault_type: robot_comms_drop
+    target_id: R-007
+    duration_ticks: 120
+    severity: HIGH
+
+pass_criteria:
+  max_lost_orders: 0
+  max_safety_violations: 0
+  min_on_time_pct: 75.0
+  max_recovery_ticks: 180
+  max_unverified_picks: 0
