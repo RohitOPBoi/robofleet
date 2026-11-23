@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  robofleet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: robofleet-command-centre
+    ports:
+      - "8000:8000"
+    environment:
+      - ROBOFLEET_HOST=0.0.0.0
+      - ROBOFLEET_PORT=8000
+      - ROBOFLEET_TOKEN=secret-robofleet-token
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
