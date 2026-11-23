@@ -1,0 +1,101 @@
+{
+  "timestamp": "20261122_193127",
+  "scenario": "standard",
+  "strategies": [
+    "fcfs_nearest",
+    "batch_greedy",
+    "random"
+  ],
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "duration_s": 300,
+  "git_commit": "ef143f59f19e1d4290b12274afa6daa85c86c698",
+  "summary": {
+    "fcfs_nearest": {
+      "on_time_percentage": {
+        "mean": 100.0,
+        "std": 0.0,
+        "ci95": 0.0
+      },
+      "order_to_ready_p90_s": {
+        "mean": 66.89,
+        "std": 62.1,
+        "ci95": 54.44
+      },
+      "order_to_handover_p90_s": {
+        "mean": 60.0,
+        "std": 66.01,
+        "ci95": 57.86
+      },
+      "throughput_orders_per_hr": {
+        "mean": 16.8,
+        "std": 6.57,
+        "ci95": 5.76
+      },
+      "orders_completed": {
+        "mean": 1.4,
+        "std": 0.55,
+        "ci95": 0.48
+      }
+    },
+    "batch_greedy": {
+      "on_time_percentage": {
+        "mean": 100.0,
+        "std": 0.0,
+        "ci95": 0.0
+      },
+      "order_to_ready_p90_s": {
+        "mean": 30.65,
+        "std": 38.82,
+        "ci95": 34.03
+      },
+      "order_to_handover_p90_s": {
+        "mean": 34.11,
+        "std": 39.47,
+        "ci95": 34.6
+      },
+      "throughput_orders_per_hr": {
+        "mean": 19.2,
+        "std": 18.2,
+        "ci95": 15.95
+      },
+      "orders_completed": {
+        "mean": 1.6,
+        "std": 1.52,
+        "ci95": 1.33
+      }
+    },
+    "random": {
+      "on_time_percentage": {
+        "mean": 100.0,
+        "std": 0.0,
+        "ci95": 0.0
+      },
+      "order_to_ready_p90_s": {
+        "mean": 30.46,
+        "std": 35.62,
+        "ci95": 31.22
+      },
+      "order_to_handover_p90_s": {
+        "mean": 33.64,
+        "std": 36.34,
+        "ci95": 31.86
+      },
+      "throughput_orders_per_hr": {
+        "mean": 14.4,
+        "std": 13.15,
+        "ci95": 11.52
+      },
+      "orders_completed": {
+        "mean": 1.2,
+        "std": 1.1,
+        "ci95": 0.96
+      }
+    }
+  }
+}

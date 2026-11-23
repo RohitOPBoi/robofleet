@@ -1,0 +1,40 @@
+{
+  "title": "RoboFleet Flagship Evidence Manifest",
+  "generated_at": "2026-11-22T21:58:09.013911+00:00",
+  "git_commit": "626bdba0474e36a682d01a2063ddfb7e47bf77e1",
+  "scenarios": [
+    "standard",
+    "rush",
+    "match_night",
+    "chaos"
+  ],
+  "strategies": [
+    "fcfs_nearest",
+    "edf_deadline",
+    "batch_greedy",
+    "heuristic"
+  ],
+  "held_out_seeds": [
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51
+  ],
+  "duration_seconds_per_run": 300,
+  "total_runs": 160,
+  "wall_time_seconds": 226.21,
+  "python_version": "3.12.13 (main, Jun 11 2026, 04:05:29) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "processor": "Intel64 Family 6 Model 151 Stepping 5, GenuineIntel",
+  "plots": [
+    "throughput_comparison.png",
+    "latency_p90_comparison.png",
+    "on_time_comparison.png"
+  ]
+}
