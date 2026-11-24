@@ -38,7 +38,7 @@ Orchestrates order arrival, multi-agent collision-free path planning, packing st
 
 | AI Operations Brain & Approvals | Chaos & Resilience Studio |
 | :---: | :---: |
-| ![AI Brain Approvals](reports/screens/command_centre_phase5_ai_live.png) | ![Chaos Studio](reports/screens/verify_3_chaos_modal.png) |
+| ![AI Brain Approvals](reports/screens/command_centre_phase5_ai_live.png) | ![Chaos Studio](reports/screens/command_centre_chaos_modal.png) |
 | *Automated anomaly detection, decision audit trail & operator approval queue* | *Scheduled and manual fault injection with MTTR recovery tracking* |
 
 </div>

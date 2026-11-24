@@ -51,9 +51,21 @@ pnpm-debug.log*
 *.pem
 *.key
 
-# Output artifacts
+# Output artifacts & recordings
 runs/
 *.log
+
+# Generated benchmark & evaluation reports
+reports/compare-*
+reports/eval-*
+reports/screens/verify_*
+reports/screens/harsh_audit_*
+reports/screens/live_audit_*
+reports/screens/ui_verified_*
+
+# Local AI agent tooling & planning
+.claude/
+.planning/
 
 # OS
 .DS_Store
