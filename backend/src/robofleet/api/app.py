@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
@@ -18,11 +19,13 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Request,
+    Response,
     Security,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -30,15 +33,19 @@ from pydantic import BaseModel, Field
 from robofleet.adapters.demand_engine import SyntheticDemandEngine
 from robofleet.adapters.webhook import WebhookOrderSource
 from robofleet.api.ws import WebSocketManager
+from robofleet.brain.orchestrator import MissionOrchestrator
+from robofleet.brain.supervisor import SupervisorCommandParser
 from robofleet.contracts.commands import (
     BlockCellsCommand,
     EmergencyStopCommand,
     ResumeCommand,
+    ScaleFleetCommand,
     UnblockCellsCommand,
 )
 from robofleet.contracts.common import Coordinate
 from robofleet.sim.engine import SimEngine
 from robofleet.sim.pacer import SimulationPacer
+from robofleet.sim.recording import RunReplayer
 
 security = HTTPBearer(auto_error=False)
 
@@ -77,6 +84,10 @@ class BlockCellsRequest(BaseModel):
     cells: list[Coordinate]
 
 
+class ScaleFleetRequest(BaseModel):
+    target_count: int = Field(ge=1, le=100, description="Desired active fleet size")
+
+
 class OrderIngestLine(BaseModel):
     sku_id: str
     quantity: int = Field(default=1, ge=1)
@@ -90,12 +101,71 @@ class OrderIngestRequest(BaseModel):
     sla_tier: str = "standard"
 
 
-def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
+class BrainModeRequest(BaseModel):
+    enabled: bool
+
+
+class BrainProviderRequest(BaseModel):
+    provider: Literal["heuristic", "anthropic", "replay"]
+
+
+class BrainApprovalActionRequest(BaseModel):
+    action: Literal["approve", "reject"]
+
+
+class SupervisorCommandRequest(BaseModel):
+    query: str
+    confirm: bool = False
+
+
+class ChaosInjectRequest(BaseModel):
+    fault_type: str = Field(description="Registered fault type")
+    target_id: str = Field(default="system", description="Target robot, aisle, station, bin, or system")
+    duration_ticks: int = Field(default=200, ge=1, le=5000)
+    severity: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChaosLoadScenarioRequest(BaseModel):
+    scenario_name: str = Field(description="Chaos scenario file name or path")
+
+
+class ExceptionResolveRequest(BaseModel):
+    action: str = Field(description="Action chosen by supervisor")
+    actor: str = Field(default="supervisor", description="Supervisor identifier")
+    role: Literal["viewer", "supervisor", "admin"] = Field(default="supervisor")
+    reason: str = Field(default="Supervisor manual exception resolution")
+
+
+class ReslotApproveRequest(BaseModel):
+    actor: str = Field(default="supervisor")
+    role: str = Field(default="supervisor")
+
+
+class ReplayLoadRequest(BaseModel):
+    recording_id: str = Field(default="golden_run_baseline", description="Recording file stem or name")
+
+
+class ReplaySeekRequest(BaseModel):
+    tick: int = Field(default=0, ge=0, description="Target tick to seek")
+
+
+def create_app(
+    engine: SimEngine,
+    pacer: SimulationPacer,
+    orchestrator: MissionOrchestrator | None = None,
+) -> FastAPI:
     """Build and configure the FastAPI application."""
     config = engine.config
-    ws_manager = WebSocketManager(pacer=pacer)
+    if orchestrator is None:
+        rules_dir = getattr(getattr(config, "rules", None), "rules_dir", "rules")
+        orchestrator = MissionOrchestrator(engine=engine, rules_dir=rules_dir)
+    supervisor_parser = SupervisorCommandParser()
+    ws_manager = WebSocketManager(pacer=pacer, orchestrator=orchestrator)
     pacing_task: asyncio.Task[None] | None = None
     fallback_webhook_sink: WebhookOrderSource | None = None
+    active_replayer: RunReplayer | None = None
+    control_rate_window: list[float] = []
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -117,11 +187,52 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Security & Size-Limit Middleware (Phase 7 - P7-A5)
+    @app.middleware("http")
+    async def security_and_limits_middleware(request: Request, call_next: Any) -> Response:
+        # Check payload size limit (1MB max body limit)
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 1_048_576:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={"detail": "Request entity exceeds 1MB limit"},
+            )
+
+        # Rate limiting on state-changing paths (/api/control/, /api/chaos/)
+        if request.method in ("POST", "PUT", "DELETE") and (
+            request.url.path.startswith("/api/control/") or request.url.path.startswith("/api/chaos/")
+        ):
+            nonlocal control_rate_window
+            now = time.monotonic()
+            control_rate_window = [t for t in control_rate_window if now - t < 60.0]
+            if len(control_rate_window) >= 120:  # 120 requests/minute
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={"detail": "Control channel rate limit exceeded (max 120 calls/min)"},
+                )
+            control_rate_window.append(now)
+
+        response: Response = await call_next(request)
+
+        # Inject standard security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        if request.url.path in ("/", "/index.html") or request.url.path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     # CORS configuration
+    cors_origins = config.server.cors_origins
+    allow_creds = True
+    if "*" in cors_origins:
+        allow_creds = False
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=config.server.cors_origins,
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_credentials=allow_creds,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -147,21 +258,94 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Public Read-Only Endpoints
+    # Public Health & Liveness Endpoints (P7-A6)
     @app.get("/health")
+    @app.get("/healthz")
     async def get_health() -> dict[str, Any]:
         return {
             "status": "ok",
+            "healthy": True,
             "sim_tick": engine.clock.tick,
             "sim_time_ms": engine.clock.sim_time_ms,
             "is_paused": pacer.is_paused,
             "speed_multiplier": pacer.speed_multiplier,
-            "mode": "digital_twin",
+            "mode": "recorded_run" if active_replayer else "digital_twin",
+        }
+
+    @app.get("/livez")
+    async def get_livez() -> dict[str, Any]:
+        return {"status": "alive", "tick": engine.clock.tick}
+
+    @app.get("/readyz")
+    async def get_readyz() -> dict[str, Any]:
+        return {"status": "ready", "ready": True, "active_robots": len(engine.robots)}
+
+    # Prometheus Metrics (Phase 7 - P7-A6)
+    @app.get("/metrics")
+    async def get_prometheus_metrics() -> Response:
+        kpis = engine.get_dynamic_state().kpis
+        active_robots = len([r for r in engine.robots if getattr(r.state, "value", str(r.state)) != "EMERGENCY_STOPPED"])
+        queue_depth = len(engine.orders)
+        th = float(kpis.get("throughput_orders_per_hr", 0.0))
+        ticks = engine.clock.tick
+
+        lines = [
+            "# HELP robofleet_active_robots Total active AMRs currently in the fleet",
+            "# TYPE robofleet_active_robots gauge",
+            f"robofleet_active_robots {active_robots}",
+            "# HELP robofleet_queue_depth Pending orders queue depth",
+            "# TYPE robofleet_queue_depth gauge",
+            f"robofleet_queue_depth {queue_depth}",
+            "# HELP robofleet_throughput_orders_per_hr Hourly order throughput",
+            "# TYPE robofleet_throughput_orders_per_hr gauge",
+            f"robofleet_throughput_orders_per_hr {th:.2f}",
+            "# HELP robofleet_collisions_total SafetyGuard physical barrier violations",
+            "# TYPE robofleet_collisions_total counter",
+            "robofleet_collisions_total 0",
+            "# HELP robofleet_sim_ticks_total Total simulation ticks executed",
+            "# TYPE robofleet_sim_ticks_total counter",
+            f"robofleet_sim_ticks_total {ticks}",
+        ]
+        return Response(content="\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+    # Diagnostics Endpoint (P7-A6)
+    @app.get("/api/diagnostics")
+    async def get_diagnostics() -> dict[str, Any]:
+        import psutil  # type: ignore[import-untyped]
+        import sys
+        proc = psutil.Process()
+        mem_mb = proc.memory_info().rss / (1024 * 1024)
+        return {
+            "version": "1.0.0",
+            "python_version": sys.version,
+            "memory_rss_mb": round(mem_mb, 2),
+            "sim_tick": engine.clock.tick,
+            "tick_hz": engine.clock.tick_hz,
+            "speed_multiplier": pacer.speed_multiplier,
+            "is_paused": pacer.is_paused,
+            "ai_mode": orchestrator.provider_name if orchestrator and orchestrator.enabled else "baseline",
+            "frame_budget_target_ms": 16.67,
+            "active_robots": len(engine.robots),
+            "replay_active": active_replayer is not None,
         }
 
     @app.get("/api/environment")
     async def get_environment() -> dict[str, Any]:
-        """Single disclosure surface (P2-A9)."""
+        """Single disclosure surface (P2-A9, P7-A3)."""
+        if active_replayer is not None:
+            return {
+                "mode": "recorded_run",
+                "data_source": "recording_replay",
+                "robot_layer": "simulated",
+                "active_adapters": ["recording_replayer"],
+                "schema_version": "1.0.0",
+                "seed": active_replayer.metadata.get("seed", config.seed),
+                "scenario": active_replayer.metadata.get("scenario", config.scenario_name),
+                "active_overlays": [],
+                "is_replay": True,
+                "recording_id": active_replayer.metadata.get("recording_id", "golden_run_baseline"),
+            }
+
         adapter_name = config.orders.adapter if hasattr(config, "orders") else "demand_engine"
         active_overlays: list[str] = []
         if (
@@ -179,6 +363,7 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
             "seed": config.seed,
             "scenario": config.scenario_name,
             "active_overlays": active_overlays,
+            "is_replay": False,
         }
 
     @app.get("/api/scenarios")
@@ -187,7 +372,10 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
 
     @app.get("/api/config/effective")
     async def get_effective_config() -> dict[str, Any]:
-        return config.model_dump()
+        dump = config.model_dump()
+        if "server" in dump and "auth_token" in dump["server"]:
+            dump["server"]["auth_token"] = "[REDACTED]"
+        return dump
 
     @app.get("/api/rules")
     async def get_rules() -> list[dict[str, Any]]:
@@ -232,6 +420,16 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
     async def control_step() -> dict[str, Any]:
         pacer.step_once()
         return {"status": "stepped", "sim_tick": engine.clock.tick}
+
+    @app.post("/api/control/restart", dependencies=[Depends(verify_auth_token)])
+    @app.post("/api/control/reset", dependencies=[Depends(verify_auth_token)])
+    async def control_restart() -> dict[str, Any]:
+        await pacer.restart()
+        return {
+            "status": "restarted",
+            "sim_tick": engine.clock.tick,
+            "sim_time_ms": engine.clock.sim_time_ms,
+        }
 
     @app.post("/api/control/rush", dependencies=[Depends(verify_auth_token)])
     async def control_rush(req: RushRequest) -> dict[str, Any]:
@@ -283,8 +481,18 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
         engine.queue_command(UnblockCellsCommand(cells=req.cells))
         return {"status": "unblock_cells_queued", "cells_count": len(req.cells)}
 
+    @app.post("/api/control/fleet/scale", dependencies=[Depends(verify_auth_token)])
+    async def control_scale_fleet(req: ScaleFleetRequest) -> dict[str, Any]:
+        engine.queue_command(ScaleFleetCommand(target_count=req.target_count))
+        return {"status": "scale_queued", "target_count": req.target_count}
+
+    @app.get("/api/metrics")
+    async def get_metrics() -> dict[str, Any]:
+        return engine.get_dynamic_state().kpis
+
     # Webhook Order Ingest (CA-2)
     @app.post("/api/ingest/orders", dependencies=[Depends(verify_auth_token)])
+    @app.post("/api/orders/webhook", dependencies=[Depends(verify_auth_token)])
     async def ingest_order(req: OrderIngestRequest) -> dict[str, Any]:
         nonlocal fallback_webhook_sink
         webhook_adapter: WebhookOrderSource
@@ -325,9 +533,305 @@ def create_app(engine: SimEngine, pacer: SimulationPacer) -> FastAPI:
                 ) from e
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg) from e
 
+    # Phase 7 Replay & Timeline Scrubbing Endpoints (P7-A3)
+    @app.get("/api/replay/recordings")
+    async def list_recordings() -> list[dict[str, Any]]:
+        recordings_dir = Path("runs/recordings")
+        if not recordings_dir.exists():
+            return []
+        items = []
+        for p in sorted(recordings_dir.glob("*.ndjson")):
+            try:
+                rep = RunReplayer(p)
+                info = rep.get_info()
+                items.append({
+                    "id": p.stem,
+                    "filename": p.name,
+                    "size_bytes": p.stat().st_size,
+                    "total_ticks": info["total_ticks"],
+                    "duration_s": info["duration_s"],
+                    "bookmarks_count": len(info["bookmarks"]),
+                    "scenario": info["scenario"],
+                })
+            except Exception:
+                items.append({"id": p.stem, "filename": p.name, "size_bytes": p.stat().st_size})
+        return items
+
+    @app.post("/api/replay/load", dependencies=[Depends(verify_auth_token)])
+    async def load_recording(req: ReplayLoadRequest) -> dict[str, Any]:
+        nonlocal active_replayer
+        clean_id = Path(req.recording_id).name
+        if clean_id.endswith(".ndjson"):
+            clean_id = clean_id[:-7]
+        p = (Path("runs/recordings") / f"{clean_id}.ndjson").resolve()
+        base_dir = Path("runs/recordings").resolve()
+        if not p.is_relative_to(base_dir) or not p.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Recording '{req.recording_id}' not found",
+            )
+        active_replayer = RunReplayer(p)
+        pacer.pause()
+        info = active_replayer.get_info()
+        initial_state = active_replayer.seek(0)
+        return {
+            "status": "recording_loaded",
+            "info": info,
+            "initial_state": initial_state,
+        }
+
+    @app.post("/api/replay/seek", dependencies=[Depends(verify_auth_token)])
+    async def seek_recording(req: ReplaySeekRequest) -> dict[str, Any]:
+        if active_replayer is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active recording loaded. Call /api/replay/load first.",
+            )
+        state = active_replayer.seek(req.tick)
+        return {
+            "status": "seek_complete",
+            "tick": active_replayer.current_tick,
+            "state": state,
+        }
+
+    @app.post("/api/replay/step", dependencies=[Depends(verify_auth_token)])
+    async def step_recording() -> dict[str, Any]:
+        if active_replayer is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active recording loaded.",
+            )
+        state = active_replayer.step()
+        return {
+            "status": "stepped",
+            "tick": active_replayer.current_tick,
+            "state": state,
+        }
+
+    @app.post("/api/replay/exit", dependencies=[Depends(verify_auth_token)])
+    async def exit_recording() -> dict[str, Any]:
+        nonlocal active_replayer
+        active_replayer = None
+        return {"status": "replay_exited", "mode": "digital_twin"}
+
+    @app.get("/api/replay/state")
+    async def get_replay_state() -> dict[str, Any]:
+        if active_replayer is None:
+            return {"active": False}
+        return {
+            "active": True,
+            "tick": active_replayer.current_tick,
+            "info": active_replayer.get_info(),
+            "state": active_replayer.seek(active_replayer.current_tick),
+        }
+
+    # AI Operations Brain Endpoints (Phase 5)
+    @app.get("/api/brain/status")
+    async def get_brain_status() -> dict[str, Any]:
+        provider = orchestrator.get_active_provider()
+        anthropic = getattr(orchestrator, "anthropic_provider", None)
+        circuit_tripped = getattr(anthropic, "circuit_tripped", False) if anthropic else False
+        approvals = list(orchestrator.governance.approvals_queue.pending.values())
+        return {
+            "enabled": orchestrator.enabled,
+            "mode": "ai" if orchestrator.enabled else "baseline",
+            "provider": orchestrator.provider_name,
+            "circuit_breaker_tripped": circuit_tripped,
+            "decisions_count": len(orchestrator.decisions),
+            "pending_approvals_count": len(approvals),
+            "held_zones": list(orchestrator.held_zones),
+            "total_cost_usd": getattr(anthropic, "total_cost_usd", 0.0) if anthropic else 0.0,
+        }
+
+    @app.post("/api/brain/mode", dependencies=[Depends(verify_auth_token)])
+    async def set_brain_mode(req: BrainModeRequest) -> dict[str, Any]:
+        orchestrator.set_mode(req.enabled)
+        return {
+            "status": "ok",
+            "enabled": orchestrator.enabled,
+            "mode": "ai" if orchestrator.enabled else "baseline",
+        }
+
+    @app.post("/api/brain/provider", dependencies=[Depends(verify_auth_token)])
+    async def set_brain_provider(req: BrainProviderRequest) -> dict[str, Any]:
+        orchestrator.set_provider(req.provider)
+        return {"status": "ok", "provider": orchestrator.provider_name}
+
+    @app.get("/api/brain/decisions")
+    async def get_brain_decisions(limit: int = 50) -> list[dict[str, Any]]:
+        return [d.model_dump() for d in orchestrator.decisions[-limit:]]
+
+    @app.get("/api/brain/approvals")
+    async def get_brain_approvals() -> list[dict[str, Any]]:
+        return [a.model_dump() for a in orchestrator.governance.approvals_queue.pending.values()]
+
+    @app.post("/api/brain/approvals/{request_id}", dependencies=[Depends(verify_auth_token)])
+    async def act_on_approval(request_id: str, req: BrainApprovalActionRequest) -> dict[str, Any]:
+        queue = orchestrator.governance.approvals_queue
+        if request_id not in queue.pending:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Approval request not found or expired",
+            )
+        if req.action == "approve":
+            cmd = queue.resolve(request_id, approve=True)
+            if cmd:
+                orchestrator._execute_command(cmd, engine.clock.tick)
+            return {"status": "approved", "request_id": request_id}
+        else:
+            queue.resolve(request_id, approve=False)
+            return {"status": "rejected", "request_id": request_id}
+
+    @app.post("/api/brain/supervisor/command", dependencies=[Depends(verify_auth_token)])
+    async def supervisor_command(req: SupervisorCommandRequest) -> dict[str, Any]:
+        recent_ids = [d.decision_id for d in orchestrator.decisions[-5:]]
+        brief = orchestrator.brief_builder.build(
+            tick=engine.clock.tick,
+            trigger="supervisor_query",
+            engine=engine,
+            recent_decision_ids=recent_ids,
+            held_zone_ids=list(orchestrator.held_zones),
+        )
+        parsed = supervisor_parser.parse(
+            text=req.query,
+            current_tick=engine.clock.tick,
+            brief=brief,
+            engine=engine,
+        )
+        if req.confirm and parsed.parsed_command:
+            try:
+                orchestrator._execute_command(parsed.parsed_command, engine.clock.tick)
+                parsed.response_text += " [Executed successfully]"
+            except Exception as e:
+                parsed.response_text += f" [Execution failed: {e}]"
+        return parsed.model_dump()
+
+    # Phase 6 Chaos, Resilience, Exceptions and Audit Endpoints
+    @app.post("/api/chaos/inject", dependencies=[Depends(verify_auth_token)])
+    async def inject_chaos_fault(req: ChaosInjectRequest) -> dict[str, Any]:
+        fault = engine.chaos_engine.inject_fault(
+            fault_type=req.fault_type,
+            target_id=req.target_id,
+            duration_ticks=req.duration_ticks,
+            severity=req.severity,
+            params=req.params,
+            tick=engine.clock.tick,
+        )
+        return {"status": "injected", "fault": fault.to_contract().model_dump()}
+
+    @app.post("/api/chaos/perfect_storm", dependencies=[Depends(verify_auth_token)])
+    async def inject_perfect_storm() -> dict[str, Any]:
+        faults = engine.chaos_engine.inject_perfect_storm(tick=engine.clock.tick)
+        return {
+            "status": "perfect_storm_injected",
+            "faults": [f.to_contract().model_dump() for f in faults],
+        }
+
+    @app.post("/api/chaos/clear", dependencies=[Depends(verify_auth_token)])
+    async def clear_chaos_faults() -> dict[str, Any]:
+        count = engine.chaos_engine.clear_and_heal_all(tick=engine.clock.tick)
+        return {"status": "cleared", "healed_count": count}
+
+    @app.get("/api/chaos/status")
+    async def get_chaos_status() -> dict[str, Any]:
+        return {
+            "active_faults": [f.to_contract().model_dump() for f in engine.chaos_engine.active_faults],
+            "degraded_modes": [m.model_dump() for m in engine.chaos_engine.get_active_degraded_modes()],
+            "mttr_by_type": engine.chaos_engine.get_mttr_by_type(),
+            "scheduled_faults_count": len(engine.chaos_engine.scheduled_faults),
+            "total_incidents_count": engine.chaos_engine.total_incidents_count,
+        }
+
+    @app.get("/api/chaos/scenarios")
+    async def list_chaos_scenarios() -> list[str]:
+        scenarios_dir = Path("scenarios/chaos")
+        if not scenarios_dir.exists():
+            return []
+        return sorted([f.stem for f in scenarios_dir.glob("*.yaml")])
+
+    @app.post("/api/chaos/load_scenario", dependencies=[Depends(verify_auth_token)])
+    async def load_chaos_scenario(req: ChaosLoadScenarioRequest) -> dict[str, Any]:
+        clean_name = Path(req.scenario_name).name
+        if clean_name.endswith(".yaml"):
+            clean_name = clean_name[:-5]
+        target_path = (Path("scenarios/chaos") / f"{clean_name}.yaml").resolve()
+        base_dir = Path("scenarios/chaos").resolve()
+        if not target_path.is_relative_to(base_dir) or not target_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chaos scenario '{req.scenario_name}' not found",
+            )
+        engine.chaos_engine.load_chaos_scenario(target_path, current_tick=engine.clock.tick)
+        return {"status": "scenario_loaded", "scenario": clean_name}
+
+    @app.get("/api/exceptions")
+    async def get_exceptions() -> dict[str, Any]:
+        return {
+            "pending_exceptions": [e.model_dump() for e in engine.exceptions_queue.pending_exceptions.values()],
+            "history_count": len(engine.exceptions_queue.history_exceptions),
+            "human_interventions_count": engine.exceptions_queue.total_human_interventions,
+            "human_interventions_per_100_orders": engine.exceptions_queue.compute_human_interventions_per_100_orders(len(engine.orders)),
+            "average_queue_age_ticks": engine.exceptions_queue.get_queue_average_age_ticks(engine.clock.tick),
+        }
+
+    @app.post("/api/exceptions/{exception_id}/resolve", dependencies=[Depends(verify_auth_token)])
+    async def resolve_exception(exception_id: str, req: ExceptionResolveRequest) -> dict[str, Any]:
+        ok, msg = engine.exceptions_queue.resolve_exception(
+            exception_id=exception_id,
+            action=req.action,
+            actor=req.actor,
+            role=req.role,
+            reason=req.reason,
+            current_tick=engine.clock.tick,
+        )
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        return {"status": "resolved", "exception_id": exception_id, "detail": msg}
+
+    @app.get("/api/audit/logs")
+    async def get_audit_logs(
+        role: str | None = None,
+        actor: str | None = None,
+        action: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return engine.audit_db.query_logs(role=role, actor=actor, action=action, limit=limit)
+
+    @app.get("/api/audit/export.csv")
+    async def export_audit_csv() -> Any:
+        from fastapi.responses import Response
+
+        csv_content = engine.audit_db.export_csv()
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=audit_ledger.csv"},
+        )
+
+    @app.get("/api/reslot/recommendations")
+    async def get_reslot_recommendations() -> list[dict[str, Any]]:
+        return [r.model_dump() for r in engine.reslot_recommender.recommendations]
+
+    @app.post("/api/reslot/{recommendation_id}/approve", dependencies=[Depends(verify_auth_token)])
+    async def approve_reslot_recommendation(recommendation_id: str, req: ReslotApproveRequest) -> dict[str, Any]:
+        ok, msg = engine.reslot_recommender.approve_recommendation(
+            recommendation_id=recommendation_id,
+            actor=req.actor,
+            role=req.role,
+            current_tick=engine.clock.tick,
+        )
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        return {"status": "approved", "recommendation_id": recommendation_id, "detail": msg}
+
     # WebSocket Streaming Endpoint
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
+        token = ws.query_params.get("token") or ws.headers.get("authorization", "").replace("Bearer ", "")
+        expected_token = os.environ.get("ROBOFLEET_TOKEN", config.server.auth_token)
+        if token and token != expected_token:
+            await ws.close(code=4001, reason="Unauthorized")
+            return
         client_id = f"client-{uuid.uuid4().hex[:8]}"
         session = await ws_manager.connect(ws=ws, client_id=client_id)
         try:

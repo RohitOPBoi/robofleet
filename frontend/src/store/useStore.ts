@@ -1,18 +1,35 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Alert,
+  ApprovalRequest,
+  AuditEntry,
+  BrainMode,
+  BrainProvider,
+  ChaosFault,
   Coordinate,
+  Decision,
+  DegradedMode,
   DynamicKPIs,
   EnvironmentDisclosure,
   Event,
+  ExceptionItem,
   HelloPayload,
   Order,
+  ReslotRecommendation,
   Robot,
   StaticWorld,
   WorldSnapshot,
   WsEnvelope,
 } from "../types/generated";
-import { fetchEnvironment } from "../services/api";
+import {
+  fetchBrainApprovals,
+  fetchBrainDecisions,
+  fetchBrainStatus,
+  fetchChaosStatus,
+  fetchEnvironment,
+  fetchExceptions,
+  fetchReslotRecommendations,
+} from "../services/api";
 
 export interface StoreState {
   connected: boolean;
@@ -31,11 +48,15 @@ export interface StoreState {
   speedMultiplier: number;
   theme: "dark" | "light";
   selectedRobotId: string | null;
+  focusedCoord: Coordinate | null;
   selectedOrderId: string | null;
   isEnvironmentModalOpen: boolean;
   isEStopModalOpen: boolean;
   blockModeActive: boolean;
   selectedCellsToBlock: Coordinate[];
+  leftPanelOpen: boolean;
+  rightPanelOpen: boolean;
+  activeRightTab: "alerts" | "events";
   activeOverlays: {
     showFlowArrows: boolean;
     showZones: boolean;
@@ -43,6 +64,49 @@ export interface StoreState {
     showCongestion: boolean;
   };
   environmentDisclosure: EnvironmentDisclosure | null;
+  // Phase 4: 3D Visualization, Cameras & Quality
+  viewMode: "2d" | "3d" | "split";
+  cameraMode: "orbit" | "isometric" | "follow" | "stations" | "dispatch" | "cinematic";
+  lightingPreset: "daylight" | "warm_evening" | "night_ops";
+  qualityTier: "ultra" | "high" | "medium" | "low";
+  showMiniMap: boolean;
+  show3DLabels: boolean;
+  show3DPaths: boolean;
+  showDiagnostics: boolean;
+  diagnostics: {
+    fps: number;
+    drawCalls: number;
+    triangles: number;
+    tier: string;
+  };
+  // Phase 5: AI Operations Brain
+  aiMode: BrainMode;
+  brainProvider: BrainProvider;
+  circuitBreakerTripped: boolean;
+  decisions: Decision[];
+  pendingApprovals: ApprovalRequest[];
+  heldZones: string[];
+  totalBrainCostUsd: number;
+  isDecisionLogOpen: boolean;
+  isApprovalsDrawerOpen: boolean;
+  isSupervisorBarOpen: boolean;
+  // Phase 6: Chaos, Resilience, Exceptions & Audit
+  isChaosControlOpen: boolean;
+  isExceptionsQueueOpen: boolean;
+  isAuditLogOpen: boolean;
+  isIncidentTimelineOpen: boolean;
+  activeFaults: ChaosFault[];
+  activeFaultsCount: number;
+  degradedModes: DegradedMode[];
+  pendingExceptions: ExceptionItem[];
+  reslotRecommendations: ReslotRecommendation[];
+  // Phase 7: Replay & Offline Demo
+  isReplayMode: boolean;
+  replayRecordingId: string | null;
+  replayTotalTicks: number;
+  replayBookmarks: Array<{ tick: number; type: string; title: string; description: string }>;
+  isReplaying: boolean;
+  replaySpeedMultiplier: number;
 }
 
 const initialKPIs: DynamicKPIs = {
@@ -73,13 +137,17 @@ let globalState: StoreState = {
   lastSeq: 0,
   isPaused: false,
   speedMultiplier: 1.0,
-  theme: "dark",
+  theme: (typeof localStorage !== "undefined" && (localStorage.getItem("ROBOFLEET_THEME") as any)) || "light",
   selectedRobotId: null,
+  focusedCoord: null,
   selectedOrderId: null,
   isEnvironmentModalOpen: false,
   isEStopModalOpen: false,
   blockModeActive: false,
   selectedCellsToBlock: [],
+  leftPanelOpen: true,
+  rightPanelOpen: true,
+  activeRightTab: "alerts",
   activeOverlays: {
     showFlowArrows: true,
     showZones: true,
@@ -87,21 +155,71 @@ let globalState: StoreState = {
     showCongestion: false,
   },
   environmentDisclosure: null,
+  viewMode: "3d",
+  cameraMode: "orbit",
+  lightingPreset: "daylight",
+  qualityTier: "high",
+  showMiniMap: true,
+  show3DLabels: true,
+  show3DPaths: true,
+  showDiagnostics: false,
+  diagnostics: {
+    fps: 60,
+    drawCalls: 0,
+    triangles: 0,
+    tier: "high",
+  },
+  // Phase 5: AI Operations Brain
+  aiMode: "ai",
+  brainProvider: "heuristic",
+  circuitBreakerTripped: false,
+  decisions: [],
+  pendingApprovals: [],
+  heldZones: [],
+  totalBrainCostUsd: 0,
+  isDecisionLogOpen: false,
+  isApprovalsDrawerOpen: false,
+  isSupervisorBarOpen: false,
+  // Phase 6: Chaos, Resilience, Exceptions & Audit
+  isChaosControlOpen: false,
+  isExceptionsQueueOpen: false,
+  isAuditLogOpen: false,
+  isIncidentTimelineOpen: false,
+  activeFaults: [],
+  activeFaultsCount: 0,
+  degradedModes: [],
+  pendingExceptions: [],
+  reslotRecommendations: [],
+  isReplayMode: false,
+  replayRecordingId: null,
+  replayTotalTicks: 0,
+  replayBookmarks: [],
+  isReplaying: false,
+  replaySpeedMultiplier: 1.0,
 };
 
 const listeners = new Set<() => void>();
 
 function notify() {
+  if (typeof window !== "undefined") {
+    (window as any).__ROBOFLEET_STORE__ = { getState: () => globalState };
+  }
   listeners.forEach((listener) => listener());
 }
 
 export function updateStore(updater: (prev: StoreState) => StoreState) {
   globalState = updater(globalState);
+  if (typeof localStorage !== "undefined" && globalState.viewMode) {
+    localStorage.setItem("ROBOFLEET_VIEW_MODE", globalState.viewMode);
+  }
   notify();
 }
 
 export function setStore(patch: Partial<StoreState>) {
   globalState = { ...globalState, ...patch };
+  if (patch.viewMode && typeof localStorage !== "undefined") {
+    localStorage.setItem("ROBOFLEET_VIEW_MODE", patch.viewMode);
+  }
   notify();
 }
 
@@ -119,38 +237,188 @@ export function useStore(): StoreState {
   return globalState;
 }
 
+export function normalizeRobot(raw: any): Robot {
+  const id = String(raw.robot_id || raw.id || "ROBOT-000");
+  const cell = raw.cell || raw.coord || { x: 0, y: 0 };
+  const cx = Number(cell.x) || 0;
+  const cy = Number(cell.y) || 0;
+
+  let headingDeg = 0;
+  if (typeof raw.heading_deg === "number") {
+    headingDeg = raw.heading_deg;
+  } else if (typeof raw.heading === "string") {
+    const h = raw.heading.toUpperCase();
+    if (h === "N") headingDeg = 270;
+    else if (h === "E") headingDeg = 0;
+    else if (h === "S") headingDeg = 90;
+    else if (h === "W") headingDeg = 180;
+  }
+
+  const battery = Number(raw.battery_percent ?? raw.battery_pct ?? 100);
+
+  let motion = raw.motion;
+  if (!motion) {
+    motion = {
+      from_coord: { x: cx, y: cy },
+      to_coord: { x: cx, y: cy },
+      progress: 1.0,
+      heading_deg: headingDeg,
+    };
+  } else {
+    const rawFc = motion.from_coord || motion.from_cell || { x: cx, y: cy };
+    const rawTc = motion.to_coord || motion.to_cell || { x: cx, y: cy };
+    const rawProg =
+      typeof motion.progress === "number"
+        ? motion.progress
+        : typeof motion.progress_permille === "number"
+          ? motion.progress_permille / 1000
+          : 1.0;
+    motion = {
+      from_coord: { x: Number(rawFc.x) || 0, y: Number(rawFc.y) || 0 },
+      to_coord: { x: Number(rawTc.x) || 0, y: Number(rawTc.y) || 0 },
+      progress: Math.max(0, Math.min(1, rawProg)),
+      heading_deg: Number(motion.heading_deg) || headingDeg,
+    };
+  }
+
+  return {
+    id,
+    coord: { x: cx, y: cy },
+    heading_deg: headingDeg,
+    state: raw.state || "IDLE",
+    battery_percent: battery,
+    current_task_id: raw.current_task_id || null,
+    fault_code: raw.fault || raw.fault_code || null,
+    motion,
+    telemetry: raw.telemetry || {
+      odometer_m: Number(raw.odometer_m) || 0,
+      battery_percent: battery,
+      internal_temp_c: Number(raw.internal_temp_c) || 32.0,
+      current_speed_m_s:
+        Number(raw.current_speed_m_s) ||
+        (String(raw.state).startsWith("MOVING") ? 1.2 : 0),
+    },
+  };
+}
+
+export function normalizeOrder(raw: any): Order {
+  const id = String(raw.order_id || raw.id || "ORD-000");
+  return {
+    id,
+    received_tick: Number(raw.created_tick ?? raw.received_tick ?? 0),
+    deadline_tick: Number(raw.deadline_tick ?? 1000),
+    sla_tier: String(raw.sla_tier || "standard"),
+    status: raw.status || "QUEUED",
+    lines: Array.isArray(raw.lines) ? raw.lines : [],
+    priority: Number(raw.priority) || 1,
+    assigned_robot_id: raw.assigned_robot_id || null,
+    assigned_robot_ids: Array.isArray(raw.assigned_robot_ids) ? raw.assigned_robot_ids : [],
+    tote_id: raw.tote_id || null,
+    ready_tick: raw.ready_tick ?? null,
+    handover_tick: raw.handover_tick ?? null,
+    delay_attribution: raw.delay_attribution || null,
+    at_risk: Boolean(raw.at_risk),
+  };
+}
+
+export function normalizeAlert(raw: any): Alert {
+  const id = String(raw.alert_id || raw.id || `ALERT-${Math.random()}`);
+  const entityId =
+    raw.entity_id ||
+    (Array.isArray(raw.entity_ids) && raw.entity_ids.length > 0 ? raw.entity_ids[0] : null);
+  const rawCoord = raw.coord || raw.cell || null;
+  const coord = rawCoord ? { x: Number(rawCoord.x) || 0, y: Number(rawCoord.y) || 0 } : null;
+  const tickVal = Number(raw.tick !== undefined ? raw.tick : raw.raised_tick) || 0;
+  const isCleared = Boolean(raw.cleared || (raw.resolved_tick !== null && raw.resolved_tick !== undefined));
+
+  return {
+    id,
+    tick: tickVal,
+    severity: raw.severity || "WARN",
+    category: String(raw.category || "OPERATIONAL"),
+    message: String(raw.message || "Alert notice"),
+    entity_id: entityId,
+    coord,
+    requires_human: Boolean(raw.requires_human),
+    cleared: isCleared,
+    cleared_tick: raw.cleared_tick || raw.resolved_tick || null,
+  };
+}
+
 // WebSocket Connection Manager singleton hook
 export function useWebSocketConnection() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const backoffMsRef = useRef(500);
+  const backoffMsRef = useRef(300);
 
   useEffect(() => {
-    // Initial fetch of environment disclosure
     fetchEnvironment()
-      .then((env) => {
-        setStore({ environmentDisclosure: env });
-      })
-      .catch((err) => {
-        console.warn("Could not load environment disclosure yet:", err);
-      });
+      .then((env) => setStore({ environmentDisclosure: env }))
+      .catch((err) => console.warn("Environment disclosure initial fetch:", err));
+
+    fetchBrainStatus()
+      .then((st) =>
+        setStore({
+          aiMode: st.mode || "ai",
+          brainProvider: st.provider || "heuristic",
+          circuitBreakerTripped: Boolean(st.circuit_breaker_tripped),
+          heldZones: st.held_zones || [],
+          totalBrainCostUsd: Number(st.total_cost_usd) || 0,
+        })
+      )
+      .catch((err) => console.warn("Brain status initial fetch:", err));
+
+    fetchBrainDecisions(50)
+      .then((decs) => setStore({ decisions: decs }))
+      .catch((err) => console.warn("Brain decisions initial fetch:", err));
+
+    fetchBrainApprovals()
+      .then((apps) => setStore({ pendingApprovals: apps }))
+      .catch((err) => console.warn("Brain approvals initial fetch:", err));
+
+    fetchChaosStatus()
+      .then((cs) =>
+        setStore({
+          activeFaults: cs.active_faults || [],
+          activeFaultsCount: (cs.active_faults || []).length,
+          degradedModes: cs.degraded_modes || [],
+        })
+      )
+      .catch((err) => console.warn("Chaos status initial fetch:", err));
+
+    fetchExceptions()
+      .then((exs) =>
+        setStore({
+          pendingExceptions: exs.pending_exceptions || [],
+        })
+      )
+      .catch((err) => console.warn("Exceptions initial fetch:", err));
+
+    fetchReslotRecommendations()
+      .then((recs) =>
+        setStore({
+          reslotRecommendations: recs || [],
+        })
+      )
+      .catch((err) => console.warn("Reslot recommendations initial fetch:", err));
 
     function connect() {
       const loc = window.location;
       const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
       const host = loc.hostname || "localhost";
       const port = loc.port === "5173" ? "8000" : loc.port || "8000";
-      const wsUrl = `${protocol}//${host}:${port}/ws`;
+      const token = localStorage.getItem("ROBOFLEET_TOKEN") || "secret-robofleet-token";
+      const wsUrl = `${protocol}//${host}:${port}/ws?token=${encodeURIComponent(token)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setStore({ connected: true });
-        backoffMsRef.current = 500;
+        backoffMsRef.current = 300;
 
-        // Start ping loop
+        if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping", seq: globalState.lastSeq }));
@@ -171,14 +439,13 @@ export function useWebSocketConnection() {
         setStore({ connected: false });
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
 
-        // Exponential backoff reconnect
-        const nextBackoff = Math.min(backoffMsRef.current * 1.5, 4000);
+        const nextBackoff = Math.min(backoffMsRef.current * 1.5, 2000);
         backoffMsRef.current = nextBackoff;
         reconnectTimeoutRef.current = setTimeout(connect, nextBackoff);
       };
 
       ws.onerror = (e) => {
-        console.warn("WebSocket connection warning:", e);
+        console.warn("WebSocket warning:", e);
         ws.close();
       };
     }
@@ -196,9 +463,7 @@ export function useWebSocketConnection() {
 function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
   const { type, seq, tick, payload } = envelope;
 
-  // Gap detection: if seq jumps unexpectedly, send resync
   if (globalState.lastSeq > 0 && seq > globalState.lastSeq + 1 && type === "delta") {
-    console.warn(`Detected sequence gap! Current: ${globalState.lastSeq}, Incoming: ${seq}. Requesting resync...`);
     ws.send(JSON.stringify({ type: "resync" }));
     return;
   }
@@ -220,96 +485,141 @@ function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
     }
     case "snapshot": {
       const snap = payload as any;
+      const rawRobots = snap.robots || snap.dynamic?.robots || [];
       const robotsMap: Record<string, Robot> = {};
-      const snapRobots = snap.robots || snap.dynamic?.robots;
-      if (snapRobots) {
-        if (Array.isArray(snapRobots)) {
-          snapRobots.forEach((r: any) => {
-            const id = r.robot_id || r.id;
-            robotsMap[id] = {
-              ...r,
-              id: id,
-              battery_percent: r.battery_percent ?? r.battery_pct ?? 100,
-            };
-          });
-        } else {
-          Object.entries(snapRobots).forEach(([id, r]: [string, any]) => {
-            robotsMap[id] = {
-              ...r,
-              id: id,
-              battery_percent: r.battery_percent ?? r.battery_pct ?? 100,
-            };
-          });
-        }
-      }
+      const listRobots = Array.isArray(rawRobots) ? rawRobots : Object.values(rawRobots);
+      listRobots.forEach((r) => {
+        const nr = normalizeRobot(r);
+        robotsMap[nr.id] = nr;
+      });
 
+      const rawOrders = snap.orders || snap.dynamic?.orders || [];
       const ordersMap: Record<string, Order> = {};
-      const snapOrders = snap.orders || snap.dynamic?.orders;
-      if (snapOrders) {
-        if (Array.isArray(snapOrders)) {
-          snapOrders.forEach((o: any) => {
-            const id = o.order_id || o.id;
-            ordersMap[id] = { ...o, id: id };
-          });
-        } else {
-          Object.entries(snapOrders).forEach(([id, o]: [string, any]) => {
-            ordersMap[id] = { ...o, id: id };
-          });
-        }
-      }
+      const listOrders = Array.isArray(rawOrders) ? rawOrders : Object.values(rawOrders);
+      listOrders.forEach((o) => {
+        const no = normalizeOrder(o);
+        ordersMap[no.id] = no;
+      });
+
+      const rawAlerts = snap.alerts || snap.active_alerts || snap.dynamic?.alerts || snap.dynamic?.active_alerts || [];
+      const listAlerts = Array.isArray(rawAlerts) ? rawAlerts.map(normalizeAlert) : [];
 
       setStore({
         snapshot: snap,
+        staticWorld: snap.layout
+          ? {
+            meta: snap.meta,
+            layout: snap.layout,
+            skus: snap.skus || snap.catalogue || {},
+            bins: snap.bins || {},
+          }
+          : globalState.staticWorld,
         robots: robotsMap,
         orders: ordersMap,
-        alerts: snap.alerts || snap.active_alerts || snap.dynamic?.active_alerts || [],
+        alerts: listAlerts,
         kpis: snap.kpis || snap.dynamic?.kpis || initialKPIs,
-        recentEvents: snap.recent_events || snap.dynamic?.recent_events || [],
-        tick: snap.tick ?? tick,
-        simTimeMs: snap.sim_time_ms ?? 0,
+        recentEvents: snap.recent_events || snap.dynamic?.recent_events || snap.events || [],
+        tick: snap.tick ?? snap.dynamic?.tick ?? tick,
+        simTimeMs: snap.sim_time_ms ?? snap.dynamic?.sim_time_ms ?? 0,
         lastSeq: seq,
       });
       break;
     }
     case "delta": {
       updateStore((prev) => {
-        // Merge robots
         const nextRobots = { ...prev.robots };
         if (payload.robots) {
-          Object.entries(payload.robots as Record<string, Partial<Robot>>).forEach(([id, rPatch]) => {
-            const current = nextRobots[id];
-            nextRobots[id] = current ? ({ ...current, ...rPatch } as Robot) : (rPatch as Robot);
+          const list = Array.isArray(payload.robots) ? payload.robots : Object.values(payload.robots);
+          list.forEach((r: any) => {
+            const nr = normalizeRobot(r);
+            nextRobots[nr.id] = nr;
           });
         }
 
-        // Merge orders
         const nextOrders = { ...prev.orders };
         if (payload.orders) {
-          Object.entries(payload.orders as Record<string, Partial<Order>>).forEach(([id, oPatch]) => {
-            const current = nextOrders[id];
-            nextOrders[id] = current ? ({ ...current, ...oPatch } as Order) : (oPatch as Order);
+          const list = Array.isArray(payload.orders) ? payload.orders : Object.values(payload.orders);
+          list.forEach((o: any) => {
+            const no = normalizeOrder(o);
+            nextOrders[no.id] = no;
           });
         }
 
-        // Prepend new events, keep up to 100
-        const nextEvents = [...(payload.new_events || []), ...prev.recentEvents].slice(0, 100);
+        const nextAlerts =
+          payload.alerts !== undefined
+            ? (Array.isArray(payload.alerts) ? payload.alerts.map(normalizeAlert) : prev.alerts)
+            : prev.alerts;
+
+        const newEventsList = payload.new_events || payload.events || [];
+        const nextEvents = [...newEventsList, ...prev.recentEvents].slice(0, 100);
+
+        let nextDecisions = prev.decisions;
+        if (payload.recent_decision) {
+          const rec = payload.recent_decision;
+          if (!prev.decisions.some((d) => d.decision_id === rec.decision_id)) {
+            nextDecisions = [rec, ...prev.decisions].slice(0, 100);
+          }
+        }
+
+        const brainStatus = payload.brain_status;
+        const nextAiMode = brainStatus ? (brainStatus.ai_mode as BrainMode) : prev.aiMode;
+        const nextProvider = brainStatus
+          ? (brainStatus.provider_status as BrainProvider)
+          : prev.brainProvider;
+        const nextApprovals =
+          payload.pending_approvals !== undefined
+            ? payload.pending_approvals
+            : prev.pendingApprovals;
+        const nextCost = brainStatus
+          ? Number(brainStatus.total_cost_usd) || 0
+          : prev.totalBrainCostUsd;
+
+        const nextDegraded =
+          payload.degraded_modes !== undefined ? payload.degraded_modes : prev.degradedModes;
+        const nextActiveFaultsCount =
+          payload.active_faults_count !== undefined
+            ? payload.active_faults_count
+            : prev.activeFaultsCount;
+        const nextExceptions =
+          payload.pending_exceptions !== undefined
+            ? payload.pending_exceptions
+            : prev.pendingExceptions;
+        const nextReslot =
+          payload.reslot_recommendations !== undefined
+            ? payload.reslot_recommendations
+            : prev.reslotRecommendations;
 
         return {
           ...prev,
           robots: nextRobots,
           orders: nextOrders,
-          alerts: payload.alerts !== undefined ? payload.alerts : prev.alerts,
+          alerts: nextAlerts,
           kpis: payload.kpis || prev.kpis,
           recentEvents: nextEvents,
+          decisions: nextDecisions,
+          aiMode: nextAiMode,
+          brainProvider: nextProvider,
+          pendingApprovals: nextApprovals,
+          totalBrainCostUsd: nextCost,
+          degradedModes: nextDegraded,
+          activeFaultsCount: nextActiveFaultsCount,
+          pendingExceptions: nextExceptions,
+          reslotRecommendations: nextReslot,
           tick: payload.tick ?? tick,
-          simTimeMs: payload.sim_time_ms ?? prev.simTimeMs,
+          simTimeMs:
+            payload.sim_time_ms !== undefined
+              ? Number(payload.sim_time_ms)
+              : payload.tick !== undefined
+                ? Number(payload.tick) * 100
+                : tick !== undefined
+                  ? Number(tick) * 100
+                  : prev.simTimeMs,
           lastSeq: seq,
         };
       });
       break;
     }
     case "pong":
-      // Keepalive confirmed
       break;
     default:
       break;
