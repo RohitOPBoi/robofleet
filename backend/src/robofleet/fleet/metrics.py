@@ -90,9 +90,18 @@ class BaseFulfillmentMetricsProvider:
         idle_count = sum(1 for r in robots if r.state == RobotState.IDLE)
         picking_count = sum(1 for r in robots if r.state == RobotState.PICKING)
 
+        # Order exceptions and resilience metrics
+        short_orders = sum(1 for o in orders if o.status == OrderStatus.FAILED_PARTIAL)
+        lost_orders = sum(1 for o in orders if o.status == OrderStatus.FAILED)
+        partial_rate = (short_orders / total_orders_received * 100.0) if total_orders_received else 0.0
+
         return {
             "orders_received": float(total_orders_received),
             "orders_completed": float(total_orders_completed),
+            "orders_affected_count": float(sum(1 for o in orders if getattr(o, "at_risk", False) or o.status == OrderStatus.FAILED_PARTIAL)),
+            "orders_delayed_count": float(late_count),
+            "orders_lost_count": float(lost_orders),
+            "partial_fulfilment_rate_pct": float(round(partial_rate, 2)),
             "throughput_orders_per_hr": float(round(throughput_per_hr, 2)),
             "queue_depth": float(len(active_orders)),
             "at_risk_orders": float(sum(1 for o in active_orders if o.at_risk)),
@@ -137,6 +146,11 @@ class OperationsMetricTracker:
         supervisor_util: float = 0.0,
         deadlocks: int = 0,
         alerts_count: int = 0,
+        mttd_s: float = 0.0,
+        mttr_s: float = 0.0,
+        human_interventions_per_100: float = 0.0,
+        exceptions_queue_age: float = 0.0,
+        degraded_mode_time_s: float = 0.0,
     ) -> dict[str, float]:
         kpis = self.provider.compute(orders, robots, current_tick, self.tick_hz)
         kpis["station_utilization_pct"] = float(round(station_util * 100.0, 2))
@@ -144,6 +158,12 @@ class OperationsMetricTracker:
         kpis["deadlock_incidents"] = float(deadlocks)
         kpis["active_alerts_count"] = float(alerts_count)
         kpis["collisions_count"] = 0.0
+        kpis["safety_incidents_count"] = 0.0
+        kpis["mttd_seconds"] = float(round(mttd_s, 2))
+        kpis["mttr_seconds"] = float(round(mttr_s, 2))
+        kpis["human_interventions_per_100_orders"] = float(round(human_interventions_per_100, 2))
+        kpis["exceptions_queue_age_ticks"] = float(round(exceptions_queue_age, 1))
+        kpis["degraded_mode_duration_s"] = float(round(degraded_mode_time_s, 2))
         return kpis
 
     def export_metrics_json(

@@ -255,6 +255,31 @@ class MissionOrchestrator:
                         s.metadata = {}
                     s.metadata["max_queue_depth"] = cmd.get("max_queue_depth", 6)
 
+        elif ctype == "reassign_task":
+            rob_id = cmd.get("robot_id")
+            if rob_id and hasattr(self.engine, "chaos_engine"):
+                self.engine.chaos_engine.recovery_mgr.reassign_robot_tasks(rob_id, tick)
+
+        elif ctype == "substitute_item":
+            ord_id = cmd.get("order_id")
+            sku_id = cmd.get("sku_id")
+            qty = cmd.get("quantity", 1)
+            reason = cmd.get("reason", "ai_arbitrated_substitution")
+            if ord_id and sku_id and hasattr(self.engine, "chaos_engine"):
+                self.engine.chaos_engine.recovery_mgr.substitute_missing_or_damaged_item(
+                    order_id=ord_id, sku_id=sku_id, quantity=qty, reason=reason, tick=tick
+                )
+
+        elif ctype == "reroute_station":
+            st_id = cmd.get("station_id")
+            if st_id and hasattr(self.engine, "chaos_engine"):
+                self.engine.chaos_engine.recovery_mgr.rebalance_station_queues(st_id, tick)
+
+        elif ctype == "clear_fault":
+            t_id = cmd.get("target_id")
+            if t_id and hasattr(self.engine, "chaos_engine"):
+                self.engine.chaos_engine.resolve_fault(t_id, tick)
+
     def _append_decision_to_log(self, decision: Decision) -> None:
         try:
             with open(self.decisions_log_path, "a", encoding="utf-8") as f:

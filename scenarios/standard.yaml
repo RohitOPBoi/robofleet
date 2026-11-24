@@ -44,6 +44,49 @@ rules:
   rules_dir: rules
   hot_reload: true
 
+orders:
+  adapter: demand_engine
+  demand_profile: profiles/standard_evening.yaml
+  at_risk_threshold_ticks: 150
+  history_limit: 500
+  rush_multiplier: 1.0
+  urgent_share: 0.20
+  nominal_service_time_ticks: 300
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  delta_hz: 10.0
+  auth_token: secret-robofleet-token
+  cors_origins: ["*"]
+
+verification:
+  enabled: true
+  base_error_rate: 0.04
+  retry_limit: 1
+  confidence_threshold: 0.85
+  grasp_failure_rate: 0.015
+  wrong_item_rate: 0.010
+  quantity_mismatch_rate: 0.010
+  damaged_item_rate: 0.005
+
+chaos:
+  enabled: true
+  scenario_file: null
+  random_injection_rate: 0.0
+
+replenishment:
+  enabled: true
+  low_stock_threshold: 3
+  restock_quantity: 10
+  stocker_speed_ticks: 40
+
+reslotting:
+  enabled: true
+  evaluation_interval_ticks: 250
+  max_recommendations: 5
+  max_congestion_proxy_limit: 0.75
+
 planner:
   type: astar_flow
   params:
@@ -52,6 +95,6 @@ planner:
     deadlock_threshold_ticks: 60
 
 dispatcher:
-  type: wander
+  type: robot_supervisor
   params:
     dwell_ticks: 20

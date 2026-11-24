@@ -1,0 +1,30 @@
+id: command_bulk_reroute_human
+version: 1.0.0
+scope: command
+description: "Rerouting with more than 5 avoid cells requires human supervisor approval"
+severity: WARN
+effect: require_human
+enabled: true
+params:
+  timeout_ticks: 40
+  default_action: deny
+when:
+  all:
+    - field: "command.command_type"
+      op: "=="
+      value: "reroute_robot"
+    - field: "command.avoid_cells"
+      op: "!="
+      value: null
+tests:
+  - name: "reroute with avoid cells triggers human approval"
+    context:
+      command:
+        command_type: "reroute_robot"
+        robot_id: "R-004"
+        avoid_cells: [{ x: 5, y: 5 }, { x: 5, y: 6 }]
+    expected_match: true
+  - name: "normal command does not trigger human approval"
+    context:
+      command: { command_type: "assign_task", robot_id: "R-004" }
+    expected_match: false

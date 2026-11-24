@@ -1,0 +1,220 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:robofleet-sbom-20261123012423",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-23T01:24:23.693704+00:00",
+    "component": {
+      "name": "robofleet",
+      "version": "0.1.0",
+      "type": "application",
+      "description": "RoboFleet Dark Store Command Centre & Digital Twin"
+    },
+    "tools": [
+      {
+        "vendor": "RoboFleet",
+        "name": "sbom-generator",
+        "version": "1.0.0"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "fastapi",
+      "version": "0.165.0",
+      "purl": "pkg:pypi/fastapi@0.165.0",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "uvicorn",
+      "version": "0.54.0",
+      "purl": "pkg:pypi/uvicorn@0.54.0",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "pydantic",
+      "version": "2.14.4",
+      "purl": "pkg:pypi/pydantic@2.14.4",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "pyyaml",
+      "version": "6.0.4",
+      "purl": "pkg:pypi/pyyaml@6.0.4",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "numpy",
+      "version": "2.5.5",
+      "purl": "pkg:pypi/numpy@2.5.5",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "websockets",
+      "version": "17.4",
+      "purl": "pkg:pypi/websockets@17.4",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "matplotlib",
+      "version": "3.11.2",
+      "purl": "pkg:pypi/matplotlib@3.11.2",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "psutil",
+      "version": "7.2.2",
+      "purl": "pkg:pypi/psutil@7.2.2",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "pytest",
+      "version": "9.2.0",
+      "purl": "pkg:pypi/pytest@9.2.0",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "ruff",
+      "version": "0.17.6",
+      "purl": "pkg:pypi/ruff@0.17.6",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "mypy",
+      "version": "2.4.1",
+      "purl": "pkg:pypi/mypy@2.4.1",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "hypothesis",
+      "version": "6.170.17",
+      "purl": "pkg:pypi/hypothesis@6.170.17",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "httpx",
+      "version": "0.28.1",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "ecosystem": "PyPI"
+    },
+    {
+      "type": "library",
+      "name": "@react-three/drei",
+      "version": "9.122.0",
+      "purl": "pkg:npm/@react-three/drei@9.122.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "@react-three/fiber",
+      "version": "8.18.0",
+      "purl": "pkg:npm/@react-three/fiber@8.18.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "@types/three",
+      "version": "0.187.0",
+      "purl": "pkg:npm/@types/three@0.187.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "lucide-react",
+      "version": "1.16.0",
+      "purl": "pkg:npm/lucide-react@1.16.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "18.3.1",
+      "purl": "pkg:npm/react@18.3.1",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "18.3.1",
+      "purl": "pkg:npm/react-dom@18.3.1",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "three",
+      "version": "0.187.0",
+      "purl": "pkg:npm/three@0.187.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "@types/react",
+      "version": "18.3.5",
+      "purl": "pkg:npm/@types/react@18.3.5",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "@types/react-dom",
+      "version": "18.3.0",
+      "purl": "pkg:npm/@types/react-dom@18.3.0",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "@vitejs/plugin-react",
+      "version": "4.3.1",
+      "purl": "pkg:npm/@vitejs/plugin-react@4.3.1",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "autoprefixer",
+      "version": "10.4.20",
+      "purl": "pkg:npm/autoprefixer@10.4.20",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "postcss",
+      "version": "8.4.47",
+      "purl": "pkg:npm/postcss@8.4.47",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "tailwindcss",
+      "version": "3.4.13",
+      "purl": "pkg:npm/tailwindcss@3.4.13",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "typescript",
+      "version": "5.6.2",
+      "purl": "pkg:npm/typescript@5.6.2",
+      "ecosystem": "npm"
+    },
+    {
+      "type": "library",
+      "name": "vite",
+      "version": "5.4.6",
+      "purl": "pkg:npm/vite@5.4.6",
+      "ecosystem": "npm"
+    }
+  ]
+}

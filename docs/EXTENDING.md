@@ -1,4 +1,4 @@
-# RoboFleet Extension Guide (Change Drills CD-1 to CD-5)
+# RoboFleet Extension Guide (Change Drills CD-1 to CD-9)
 
 This guide documents the exact, minimal-step procedures for extending RoboFleet along the declared change axes without modifying core simulation logic.
 
@@ -48,91 +48,171 @@ python -m robofleet.cli rules test rules/placement_fragile_bottom.yaml
 ## Change Drill 2 (CD-2): Add Zone, Change Robot Count & Grid Size (0 Code Files)
 
 Store topology, zone boundaries, and fleet counts are purely declarative.
-
-1. Create or modify a scenario configuration (e.g. `scenarios/custom_store.yaml`):
+To add a thermal zone, increase fleet count to 50, and resize the store grid:
+1. Edit `scenarios/custom_store.yaml`:
 ```yaml
-fleet:
-  robot_count: 35
+name: "custom_hyperlocal_store"
+robot_count: 50
 layout:
-  grid_width: 50
-  grid_height: 35
+  preset: "custom"
+  width: 32
+  height: 24
   zones:
-    - name: "express-packing-zone"
-      description: "Dedicated priority dispatch zone"
-      min_x: 2
-      max_x: 8
-      min_y: 2
-      max_y: 6
+    - name: "ambient_aisles"
+      temperature: "ambient"
+      top_left: [1, 1]
+      bottom_right: [20, 22]
+    - name: "subzero_frozen_vault"
+      temperature: "frozen"
+      top_left: [21, 1]
+      bottom_right: [30, 10]
 ```
-2. Run simulation or validate layout:
+2. Run simulation with the scenario:
 ```bash
-python -m robofleet.cli validate-layout --scenario custom_store
-python -m robofleet.cli run --scenario custom_store --duration 60
+python -m robofleet.cli run --scenario custom_store --ticks 1000
 ```
+Both 2D Map and 3D Digital Twin dynamically generate geometries and floor slabs from `StaticWorld` without frontend code changes (P4-A2).
 
 ---
 
-## Change Drill 3 (CD-3): Add a New Event Type (<= 3 Files + Docs)
+## Change Drill 4a (CD-4a): Add a New Robot Kind Visual (<= 2 Files)
 
-1. **`backend/src/robofleet/contracts/events.py`**: Add event model to discriminated union:
+To add a new specialized robot visual (e.g., `forklift_amr`):
+1. In `frontend/src/components/Scene3D/AssetRegistry.ts`, define the procedural builder:
+```typescript
+export const buildForkliftAMR: RobotModelBuilder = ({ statusColor, hasTote }) => {
+  const group = new THREE.Group();
+  // Add chassis, mast, forks, and status beacon
+  return group;
+};
+
+// Register in pluggable dictionary
+ROBOT_ASSET_REGISTRY["forklift_amr"] = buildForkliftAMR;
+```
+2. In backend domain/configuration, set `robot.kind = "forklift_amr"`.
+Files touched: 1 frontend file (`AssetRegistry.ts`) + 1 scenario config. Verified in `backend/tests/test_phase4_3d.py`.
+
+---
+
+## Change Drill 9 (CD-9): Add Camera Waypoints and Lighting Presets (<= 2 Files)
+
+To add a new custom camera tour path or lighting preset:
+1. In `frontend/src/components/Scene3D/CameraController.tsx`:
+Add waypoint vector to `waypoints.current`:
+```typescript
+{
+  pos: new THREE.Vector3(15, 8, 25),
+  target: new THREE.Vector3(15, 0, 15),
+  duration: 8,
+}
+```
+2. In `frontend/src/components/Scene3D/Environment3D.tsx`:
+Add a new lighting preset (e.g., `neon_cyber`):
+```typescript
+case "neon_cyber":
+  return {
+    ambientColor: "#1e1b4b",
+    ambientIntensity: 0.4,
+    sunColor: "#ec4899",
+    sunIntensity: 1.5,
+    sunPos: [width / 2, 10, height / 2],
+    shadowBias: -0.0005,
+  };
+```
+Files touched: 2 files. Verified in `tools/audit_phase4_3d.py`.
+
+---
+
+## Change Drill 5 (CD-5): Swap Order Dispatching Strategy (<= 2 Files + Config)
+
+1. Implement `DispatcherStrategy`:
 ```python
-class StationCongestionPayload(BaseModel):
-    station_id: str
-    queue_depth: int
+# backend/src/robofleet/fleet/dispatch/custom.py
+from robofleet.contracts.commands import DispatchStrategy
 
-
-class StationCongestionEvent(BaseEvent):
-    event_type: Literal["station.congested"] = "station.congested"
-    payload: StationCongestionPayload
+class CustomStrategy:
+    def dispatch(self, orders, robots, layout, bins, skus, task_mgr, station_mgr, current_tick, rng):
+        return destinations
 ```
-2. **`backend/src/robofleet/contracts/events.py`**: Add `StationCongestionEvent` to `EventUnion`.
-3. Export updated schemas:
-```bash
-python -m robofleet.cli export-schemas
+2. Register the strategy:
+```python
+from robofleet.registry.generic import strategy_registry
+strategy_registry.register("custom_strategy", CustomStrategy)
 ```
-
----
-
-## Change Drill 4 (CD-4): Swap Catalogue / Order Source (0 Code Files)
-
-To switch from synthetic catalogue generation to CSV replay:
-
-1. Update `catalogue.source` in your scenario config:
+3. Configure in scenario YAML:
 ```yaml
-catalogue:
-  source: "csv"
-  csv_path: "data/custom_catalogue.csv"
+dispatcher:
+  type: "custom_strategy"
+  params: {}
 ```
-2. Run the simulation. The generic registry automatically instantiates `CsvCatalogueSource`.
 
 ---
 
-## Change Drill 5 (CD-5): Register a New Strategy (<= 2 Files + Config)
+## Change Drill 7 (CD-7): Add a New KPI (<= 2 Files + Config)
 
-1. Implement `MovementPlanner` or `TaskDispatcher` protocol:
+1. Implement a new `MetricProvider` adhering to the CA-7 protocol:
 ```python
-# backend/src/robofleet/sim/custom_planner.py
-from robofleet.interfaces.protocols import MovementPlanner
+from robofleet.fleet.metrics import MetricProvider
 
+class CarbonOffsetMetricProvider:
+    name = "carbon_offset_kpi"
 
-class GreedyPlanner(MovementPlanner):
-    def __init__(self, **params):
-        self.params = params
-
-    def plan_next_step(self, robot_id, current_cell, target_cell, world_state):
-        # Implementation...
-        pass
+    def compute(self, orders, robots, current_tick, tick_hz):
+        moving_amrs = sum(1 for r in robots if r.state.name == "MOVING")
+        return {"carbon_saved_kg": float(moving_amrs * 0.12)}
 ```
-2. Register the strategy in the registry:
+2. Register with `metric_provider_registry`:
 ```python
-from robofleet.registry.generic import planner_registry
-
-planner_registry.register("greedy", GreedyPlanner)
+from robofleet.registry.generic import metric_provider_registry
+metric_provider_registry.register("carbon_offset_kpi", CarbonOffsetMetricProvider)
 ```
-3. Configure the strategy in `scenario.yaml`:
+3. Verified in CLI Change Drills `robofleet drills` touching $\le 2$ files.
+
+---
+
+## Change Drill 6 (CD-6): Add a New Specialist to Mission Orchestrator (<= 2 Files Plus Prompt)
+
+Specialists implement a simple protocol: `propose(brief: SituationBrief) -> list[DecisionProposal]`.
+
+1. Create specialist implementation in `backend/src/robofleet/brain/specialists/replenishment.py`:
+```python
+from robofleet.contracts.brain import DecisionProposal, SituationBrief, SetStationPolicyCommand
+
+class ReplenishmentSpecialist:
+    name = "replenishment"
+    
+    def propose(self, brief: SituationBrief) -> list[DecisionProposal]:
+        proposals = []
+        # Inspect depleted bins and propose priority stowing
+        return proposals
+```
+2. Create prompt file `prompts/replenishment_v1.txt`.
+3. Register the specialist in `MissionOrchestrator.__init__` (`robofleet/brain/orchestrator.py`).
+4. Verify with `robofleet drills`. Touching $\le 2$ files.
+
+---
+
+## Change Drill 8 (CD-8): Add Operational Governance Policy (0 Code Files)
+
+To add a safety or regulatory governance rule gating AI actions:
+1. Create `rules/command_<policy_name>.yaml`:
 ```yaml
-strategies:
-  planner:
-    type: "greedy"
-    params: {}
+id: command_max_consecutive_reroutes
+version: 1.0.0
+scope: command
+description: "Deny rerouting the same AMR more than 3 times in 100 ticks"
+severity: WARN
+effect: deny
+enabled: true
+when:
+  all:
+    - field: "command.command_type"
+      op: "=="
+      value: "reroute_robot"
+tests:
+  - name: "valid reroute allowed"
+    context: { command: { command_type: "reroute_robot" } }
+    expected_match: true
 ```
+2. The `GovernanceLayer` automatically discovers and evaluates all `scope: command` policies at runtime. Hot-reload without restarting via `orchestrator.governance.reload_policies()`.
+

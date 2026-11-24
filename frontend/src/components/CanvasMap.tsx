@@ -33,6 +33,8 @@ export const CanvasMap: React.FC = () => {
     activeOverlays,
     blockModeActive,
     selectedCellsToBlock,
+    activeFaults,
+    theme,
   } = useStore();
 
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 40, y: 40 });
@@ -276,15 +278,16 @@ export const CanvasMap: React.FC = () => {
           canvas.height = canvas.clientHeight;
         }
 
-        // Cyber-dark industrial matte background
-        ctx.fillStyle = "#070A10";
+        // Cleanroom white or industrial background
+        const isLight = theme === "light";
+        ctx.fillStyle = isLight ? "#FFFFFF" : "#070A10";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.save();
         ctx.translate(pan.x, pan.y);
 
         // 1. Draw Grid Cells Base
-        ctx.strokeStyle = "rgba(30, 41, 59, 0.45)";
+        ctx.strokeStyle = isLight ? "#E2E8F0" : "rgba(30, 41, 59, 0.45)";
         ctx.lineWidth = 1;
 
         for (let y = 0; y < layout.height; y++) {
@@ -292,7 +295,7 @@ export const CanvasMap: React.FC = () => {
             const px = x * zoom;
             const py = y * zoom;
 
-            ctx.fillStyle = "#0C111D";
+            ctx.fillStyle = isLight ? "#F8FAFC" : "#0C111D";
             ctx.fillRect(px, py, zoom, zoom);
             ctx.strokeRect(px, py, zoom, zoom);
           }
@@ -449,18 +452,40 @@ export const CanvasMap: React.FC = () => {
           ctx.fillText(label, px + zoom / 2, py + zoom / 2);
         });
 
-        // 5. Draw Blocked Cells (from layout or active selection)
-        selectedCellsToBlock.forEach((c) => {
+        // 5. Draw Blocked Cells (from layout, active selection, or chaos faults)
+        const allBlockedCells: { x: number; y: number }[] = [...selectedCellsToBlock];
+        cellsList.forEach((c: any) => {
+          if (c.blocked) {
+            const p = getPos(c);
+            if (!allBlockedCells.some((b) => b.x === p.x && b.y === p.y)) {
+              allBlockedCells.push(p);
+            }
+          }
+        });
+        activeFaults.forEach((f) => {
+          if (f.target_id.startsWith("cell:")) {
+            const parts = f.target_id.replace("cell:", "").split(",");
+            if (parts.length === 2) {
+              const cx = Number(parts[0]);
+              const cy = Number(parts[1]);
+              if (!allBlockedCells.some((b) => b.x === cx && b.y === cy)) {
+                allBlockedCells.push({ x: cx, y: cy });
+              }
+            }
+          }
+        });
+
+        allBlockedCells.forEach((c) => {
           const px = c.x * zoom;
           const py = c.y * zoom;
 
-          ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+          ctx.fillStyle = "rgba(239, 68, 68, 0.4)";
           ctx.fillRect(px, py, zoom, zoom);
           ctx.strokeStyle = "#EF4444";
-          ctx.lineWidth = 1.4;
+          ctx.lineWidth = 1.6;
           ctx.strokeRect(px, py, zoom, zoom);
 
-          // Cross
+          // Diagonal Hazard Striping / Cross
           ctx.beginPath();
           ctx.moveTo(px, py);
           ctx.lineTo(px + zoom, py + zoom);

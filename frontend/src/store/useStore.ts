@@ -100,7 +100,7 @@ export interface StoreState {
   degradedModes: DegradedMode[];
   pendingExceptions: ExceptionItem[];
   reslotRecommendations: ReslotRecommendation[];
-  // Phase 7: Replay & Offline Demo
+  // Phase 7: Replay & Historical Run Operations
   isReplayMode: boolean;
   replayRecordingId: string | null;
   replayTotalTicks: number;

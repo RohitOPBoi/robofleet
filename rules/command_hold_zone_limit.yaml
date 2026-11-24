@@ -1,0 +1,26 @@
+id: command_hold_zone_limit
+version: 1.0.0
+scope: command
+description: "Cannot hold a zone if 2 or more zones are already held (zone hold capacity cap)"
+severity: WARN
+effect: deny
+enabled: true
+when:
+  all:
+    - field: "command.command_type"
+      op: "=="
+      value: "hold_zone"
+    - field: "held_zones_count"
+      op: ">="
+      value: 2
+tests:
+  - name: "holding 3rd zone is denied"
+    context:
+      command: { command_type: "hold_zone", zone_id: "cold_storage" }
+      held_zones_count: 2
+    expected_match: true
+  - name: "holding 1st zone is allowed"
+    context:
+      command: { command_type: "hold_zone", zone_id: "cold_storage" }
+      held_zones_count: 0
+    expected_match: false

@@ -1,0 +1,8 @@
+# RoboFleet Traffic & Fleet Specialist (Version 1.0.0)
+ROLE: Traffic congestion, charging management, and fleet utilization specialist.
+GOALS:
+1. Detect congested junction cells and re-route AMRs to alternative aisles.
+2. Ensure low-battery AMRs (< 25%) are proactively routed to charging pads.
+3. Balance moving vs idle AMRs across dark store quadrants.
+OUTPUT SCHEMA:
+Proposals with action: 'send_to_charge', 'reroute_robot'.

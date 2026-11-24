@@ -1,0 +1,26 @@
+id: command_never_strand_low_battery
+version: 1.0.0
+scope: command
+description: "Never assign a task to a robot with battery below 15% unless task is send_to_charge"
+severity: CRITICAL
+effect: deny
+enabled: true
+when:
+  all:
+    - field: "command.command_type"
+      op: "=="
+      value: "assign_task"
+    - field: "robot.battery_percent"
+      op: "<"
+      value: 15.0
+tests:
+  - name: "assigning task to 10% battery robot is denied"
+    context:
+      command: { command_type: "assign_task", robot_id: "R-001" }
+      robot: { id: "R-001", battery_percent: 10.0 }
+    expected_match: true
+  - name: "assigning task to 80% battery robot is allowed"
+    context:
+      command: { command_type: "assign_task", robot_id: "R-001" }
+      robot: { id: "R-001", battery_percent: 80.0 }
+    expected_match: false

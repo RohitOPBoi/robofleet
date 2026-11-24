@@ -13,9 +13,15 @@ from robofleet.contracts.robot import Robot
 
 
 class WanderDispatcher:
-    def __init__(self, dwell_ticks: int = 20, recharge_target_pct: float = 95.0) -> None:
+    def __init__(
+        self,
+        dwell_ticks: int = 20,
+        recharge_target_pct: float = 95.0,
+        park_when_idle: bool = False,
+    ) -> None:
         self.dwell_ticks = dwell_ticks
         self.recharge_target_pct = recharge_target_pct
+        self.park_when_idle = park_when_idle
         self._robot_dwell: dict[str, int] = {}
         self._robot_destinations: dict[str, Coordinate] = {}
 
@@ -113,10 +119,26 @@ class WanderDispatcher:
                 destinations[r_id] = staging_pos
                 self._robot_destinations[r_id] = staging_pos
 
-        # Phase 2: All other robots (normal wandering)
-        for robot in robots:
+        # Phase 2: All other robots (parking / resting when idle)
+        sorted_all_robots = sorted(robots, key=lambda r: r.robot_id)
+        parking_cells = layout.parking_cells or []
+
+        for idx, robot in enumerate(sorted_all_robots):
             r_id = robot.robot_id
             if r_id in destinations:
+                continue
+
+            # If park_when_idle is enabled and parking bays are configured, rest in assigned bay
+            if self.park_when_idle and parking_cells:
+                home_slot = parking_cells[idx % len(parking_cells)]
+                if robot.cell.as_tuple() == home_slot.as_tuple():
+                    # Rest at designated home parking spot without aimless roaming
+                    destinations[r_id] = robot.cell
+                    self._robot_destinations[r_id] = robot.cell
+                    self._robot_dwell[r_id] = 0
+                else:
+                    destinations[r_id] = home_slot
+                    self._robot_destinations[r_id] = home_slot
                 continue
 
             curr_target = self._robot_destinations.get(r_id)
@@ -148,3 +170,59 @@ class WanderDispatcher:
                 destinations[r_id] = curr_target
 
         return destinations
+
+    def dispatch(
+        self,
+        orders: list[Any],
+        robots: list[Robot],
+        layout: Layout,
+        bins: dict[str, Any],
+        skus: dict[str, Any],
+        task_mgr: Any,
+        station_mgr: Any,
+        current_tick: int,
+        rng: np.random.Generator,
+    ) -> dict[str, Coordinate]:
+        """Dispatch with intelligent Robot Supervisor when orders exist; fallback to wander when empty."""
+        from robofleet.contracts.order import OrderStatus
+        from robofleet.fleet.strategies.supervisor import RobotSupervisorStrategy
+
+        active_orders = [
+            o
+            for o in orders
+            if getattr(o, "status", None)
+            in (
+                OrderStatus.RECEIVED,
+                OrderStatus.QUEUED,
+                OrderStatus.PLANNED,
+                OrderStatus.RETRIEVING,
+                OrderStatus.AT_STATION,
+                OrderStatus.PICKING,
+            )
+        ]
+        active_tasks = any(r.current_task_id is not None for r in robots)
+        if active_orders or active_tasks:
+            if not hasattr(self, "_supervisor_delegate"):
+                self._supervisor_delegate = RobotSupervisorStrategy(
+                    low_battery_threshold=20.0,
+                    recharge_target_pct=self.recharge_target_pct,
+                )
+            return self._supervisor_delegate.dispatch(
+                orders=orders,
+                robots=robots,
+                layout=layout,
+                bins=bins,
+                skus=skus,
+                task_mgr=task_mgr,
+                station_mgr=station_mgr,
+                current_tick=current_tick,
+                rng=rng,
+            )
+
+        return self.get_destinations(
+            robots=robots,
+            layout=layout,
+            low_battery_threshold=20.0,
+            rng=rng,
+        )
+

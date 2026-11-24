@@ -123,6 +123,54 @@
       "title": "Coordinate",
       "type": "object"
     },
+    "DelayAttribution": {
+      "description": "WareMax delay attribution model (P3-A8).\nAttributes delay to specific fulfillment stages so the sum matches total lateness.",
+      "properties": {
+        "ext": {
+          "additionalProperties": true,
+          "description": "Extension dictionary for backward compatibility",
+          "title": "Ext",
+          "type": "object"
+        },
+        "waiting_for_robot_ticks": {
+          "default": 0,
+          "title": "Waiting For Robot Ticks",
+          "type": "integer"
+        },
+        "travel_ticks": {
+          "default": 0,
+          "title": "Travel Ticks",
+          "type": "integer"
+        },
+        "station_queue_ticks": {
+          "default": 0,
+          "title": "Station Queue Ticks",
+          "type": "integer"
+        },
+        "picking_ticks": {
+          "default": 0,
+          "title": "Picking Ticks",
+          "type": "integer"
+        },
+        "consolidation_ticks": {
+          "default": 0,
+          "title": "Consolidation Ticks",
+          "type": "integer"
+        },
+        "supervisor_handoff_ticks": {
+          "default": 0,
+          "title": "Supervisor Handoff Ticks",
+          "type": "integer"
+        },
+        "total_lateness_ticks": {
+          "default": 0,
+          "title": "Total Lateness Ticks",
+          "type": "integer"
+        }
+      },
+      "title": "DelayAttribution",
+      "type": "object"
+    },
     "EnvironmentMeta": {
       "description": "Environment metadata surface required on all top-level payloads.",
       "properties": {
@@ -256,6 +304,60 @@
           "default": "standard",
           "title": "Sla Tier",
           "type": "string"
+        },
+        "tote_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tote Id"
+        },
+        "ready_tick": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ready Tick"
+        },
+        "handover_tick": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handover Tick"
+        },
+        "assigned_robot_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assigned Robot Ids",
+          "type": "array"
+        },
+        "delay_attribution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DelayAttribution"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

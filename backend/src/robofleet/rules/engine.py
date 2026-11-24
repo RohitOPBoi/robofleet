@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 OPERATORS: dict[str, Callable[[Any, Any], Any]] = {
     "==": operator.eq,
@@ -74,7 +74,7 @@ class RuleTestCase(BaseModel):
 
 
 class Rule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     id: str
     description: str
     scope: Literal["placement", "movement", "alert", "command"]
@@ -84,7 +84,9 @@ class Rule(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     version: str = "1.0.0"
-    tests: list[RuleTestCase] = Field(default_factory=list)
+    tests: list[RuleTestCase] = Field(
+        default_factory=list, validation_alias=AliasChoices("tests", "test_cases")
+    )
 
     def matches(self, context: dict[str, Any]) -> bool:
         if not self.enabled:
@@ -122,6 +124,9 @@ class RuleEngine:
             self.rules = new_rules
 
         return len(self.rules), errors
+
+    def list_rules(self) -> list[Rule]:
+        return list(self.rules.values())
 
     def evaluate(self, scope: str, context: dict[str, Any]) -> list[Rule]:
         matched: list[Rule] = []

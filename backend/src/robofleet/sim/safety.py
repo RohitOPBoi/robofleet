@@ -220,8 +220,9 @@ class SafetyGuard:
                     robot.state = RobotState.IDLE
 
         # Update blocked robots count and state for unapproved / denied intents
+        denied_robot_ids = {d["robot_id"] for d in denials}
         for r in robots:
-            if r.robot_id not in approved_intents:
+            if r.robot_id in denied_robot_ids:
                 r.motion = None
                 if r.state not in (RobotState.UNAVAILABLE, RobotState.CHARGING):
                     r.state = RobotState.WAITING

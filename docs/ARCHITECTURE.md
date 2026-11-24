@@ -1,72 +1,85 @@
-# RoboFleet Architecture — Phase 1: Dynamic Core
+# RoboFleet Architecture — Phase 1, 2, 3, 4 & 5: Streaming Core, 3D Twin & AI Operations Brain
 
 ## 1. System Overview & Boundaries
 
-RoboFleet Phase 1 is a headless, discrete-event digital twin of a robot-assisted quick-commerce metro dark store. It provides a deterministic simulation core, declarative rule engine, non-bypassable safety boundary, layered configuration, and realistic Indian grocery catalogue.
+RoboFleet combines a deterministic simulation core with an asynchronous streaming API, an order-to-dispatch operations fleet engine, a high-fidelity 3D digital twin, and an AI Operations Brain:
+- **Headless Core (`robofleet.sim`)**: Strictly synchronous, discrete-event simulation engine with a non-bypassable safety boundary (`SafetyGuard`), deterministic RNG stream hierarchy, declarative YAML rule engine, and slotting logic.
+- **Fleet Fulfilment & Station Operations Engine (`robofleet.fleet`)**: Multi-step task lifecycle manager (`TaskManager`), bounded pick station queues with item handling difficulty multipliers (`PickingStationManager`), courier dispatch bay with Poisson rider arrivals (`DispatchBayManager`), and exact WareMax delay attribution decomposition.
+- **Space-Time Reservation Planner (`ReservationAStarPlanner`, CA-5)**: Cooperative space-time A* maintaining a rolling vertex/edge reservation table and wait-for graph cycle resolution.
+- **Baseline Strategy Dispatchers (`robofleet.fleet.strategies`, CA-5)**: Four pluggable dispatchers (`fcfs_nearest`, `edf_deadline`, `batch_greedy`, `random`) registered in `strategy_registry`.
+- **AI Operations Brain (`robofleet.brain`, CA-6, Phase 5)**: Mission Orchestrator coordinating 4 specialists (`Planner`, `Traffic & Fleet`, `Exceptions & Recovery`, `Explainer`), evaluated behind a declarative `GovernanceLayer` (CA-3), backed by an `LLMProvider` Port with automatic circuit breaker and 1-tick heuristic failover.
+- **Wall-Clock Pacing Layer (`SimulationPacer`)**: Lives outside the core. Converts discrete ticks to real-time execution with configurable speed multipliers (`0.1x` to `20x`), pause/resume, and single-step capabilities.
+- **Streaming & Control Layer (`robofleet.api`)**: Asynchronous FastAPI server publishing OpenAPI, WebSocket `/ws` at 10 Hz with coalesced backpressure, token-gated control endpoints (`/api/control/*`), brain endpoints (`/api/brain/*`), runtime fleet scaling (`/api/control/fleet/scale`), and webhook order ingest.
+- **Operations Command Centre (`frontend/`)**: React + Three.js + Vite + TypeScript command centre with 2D Canvas Map, high-performance 3D WebGL digital twin, Decision Log panel, Human-in-the-loop Approvals drawer, and Natural Language Supervisor Command Bar.
 
 ```
-                           +------------------------+
-                           |  CLI & Runner Tooling  |
-                           +-----------+------------+
-                                       |
-                +----------------------+----------------------+
-                |                      |                      |
-     +----------v----------+ +---------v----------+ +---------v----------+
-     |   Layered Config    | |  Declared Registry | |  YAML Rule Engine  |
-     | (defaults/scenario) | | (planners/dispatch)| | (placement/alerts) |
-     +----------+----------+ +---------+----------+ +---------+----------+
-                |                      |                      |
-                +----------------------+----------------------+
-                                       |
-                           +-----------v------------+
-                           |   Simulation Engine    |
-                           |   (Discrete Ticks)     |
-                           +-----------+------------+
-                                       |
-         +-----------------------------+-----------------------------+
-         |                             |                             |
-+--------v---------+          +--------v---------+          +--------v---------+
-|  World / Layout  |          |   SafetyGuard    |          | Contract Payloads|
-| (Graph & Bins)   |          | (Exclusive Mover)|          | (Snapshot/Events)|
-+------------------+          +------------------+          +------------------+
++-------------------------------------------------------------------------+
+|                  RoboFleet Live Command Centre (UI)                     |
+|  [TopBar KPIs] [2D/3D Map (60fps)] [Decision Log] [Approvals] [NL Bar]  |
++------------------------------------+------------------------------------+
+                                     |
+                         HTTP REST / WebSocket /ws
+                                     |
++------------------------------------v------------------------------------+
+|                         FastAPI & Uvicorn API                           |
+|       /api/environment   /api/control/*   /api/brain/* (Token)          |
++------------------------------------+------------------------------------+
+                                     |
++------------------------------------v------------------------------------+
+|                      SimulationPacer (Wall-Clock)                       |
+|          speed_multiplier (0.1x-20x) | pause/resume | step_once         |
++------------------------------------+------------------------------------+
+                                     |
++------------------------------------v------------------------------------+
+|                      AI Mission Orchestrator (CA-6)                     |
+|   BriefBuilder -> Specialists (Planner/Traffic/Exceptions/Explainer)    |
+|   GovernanceLayer (CA-3) -> ApprovalsQueue -> Explainer Fact Verifier   |
++------------------------------------+------------------------------------+
+                                     |
++------------------------------------v------------------------------------+
+|                  SimEngine (Deterministic Tick Loop)                    |
+|   Step 1: Commands      Step 4: Dispatcher     Step 7: Physical State   |
+|   Step 2: AI Execution  Step 5: Planner        Step 8: Rules / Alerts   |
+|   Step 3: Orders        Step 6: SafetyGuard    Step 9: Events & Advance |
++-------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. The 9-Step Tick Contract
+## 2. Pacing & Concurrency Model
 
-Every simulation tick advances logical time by an integer count (`tick_hz = 10`, 100ms per tick). The tick loop executes in strict chronological order:
-
-1. **Apply Queued Commands:** Process external inputs (`emergency_stop`, `resume`, `block_cells`, `unblock_cells`, `inject_fault`, `clear_fault`).
-2. **Brain Step:** Invokes active `Brain` protocol implementation (null placeholder in Phase 1).
-3. **Order Source Step:** Invokes active `OrderSource` protocol implementation (null placeholder in Phase 1).
-4. **Dispatcher Step:** Allocates tasks/destinations to idle robots via `TaskDispatcher` protocol (default: `wander` with dwell times).
-5. **Planner Propose Move Intents:** Computes path step intents via `MovementPlanner` protocol (default: `astar_flow` with traffic heuristics).
-6. **SafetyGuard Validate & Commit:** Exclusive mutation point. Validates collision-freedom, swap-prevention, flow adherence, e-stops, and reservations. Commits robot positions.
-7. **Update Physical State:** Updates motion progress, battery drain/charge rates, charging station connections, and operational states.
-8. **Evaluate Alert Rules:** Evaluates declarative YAML rules against dynamic world state to raise or auto-resolve active alerts.
-9. **Emit Events & Advance:** Emits typed events with monotonically increasing sequence IDs (`seq`), updates metrics, advances `tick += 1`.
+1. **Isolation**: The core `SimEngine` has zero knowledge of asyncio, websockets, or network requests.
+2. **Step Invocation**: `SimulationPacer` schedules `engine.step()` inside an asyncio worker task, calculates elapsed wall-clock time, and regulates sleep intervals:
+   $$\Delta t_{\text{sleep}} = \frac{1}{\text{tick\_hz} \times \text{speed\_multiplier}}$$
+3. **Control Translation**: All supervisory actions from `/api/control/*` and approved AI decisions from `/api/brain/*` are mapped to typed `CommandUnion` objects and queued for atomic execution during Step 1 of the next simulation tick.
 
 ---
 
-## 3. Core Invariants & Safety Boundary (SR-7)
+## 3. WebSocket Envelope Contract (`/ws`)
 
-1. **SafetyGuard Exclusivity:** No component outside `SafetyGuard.validate_and_apply_moves` is permitted to mutate `robot.cell`. Dispatchers and Planners output *intents* only.
-2. **Cell Reservation & Swap Immunity:** Moving robots reserve both their source and destination cells across the duration of a move transition. Stationary robots lock their occupied cell. Head-on swaps and double-occupancies are physically impossible by construction.
-3. **Discrete Determinism:** All state progression depends strictly on the initial `seed`, `config`, and injected command sequence. No wall-clock time (`time.time()`) is referenced inside core logic. Independent `SeedSequence` streams prevent cross-component RNG coupling. Canonical JSON serialization with SHA-256 state hashing provides bit-for-bit auditability.
-4. **Zero Magic Numbers (SR-5):** All thresholds, rates, speeds, and dimensions reside in typed Pydantic models in `config/models.py`. The `tools/magic_numbers.py` scanner strictly gates PRs against undeclared literals.
+Every frame carries version, type, sequence number, tick, and payload:
+```json
+{
+  "v": "1.0.0",
+  "type": "hello | static_world | snapshot | delta | ping | pong | resync | error",
+  "seq": 450,
+  "tick": 450,
+  "payload": { ... }
+}
+```
+Clients detect sequence continuity. If $\text{seq}_{\text{in}} > \text{seq}_{\text{last}} + 1$, the client requests `{"type": "resync"}`.
+Slow clients receive coalesced deltas via a bounded outbound queue (20 items max), eliminating memory bloat.
 
 ---
 
-## 4. Declared Extension Seams (CA-1 to CA-9)
+## 4. Phase 5 AI Operations Brain & Governance Architecture
 
-All extension points use generic typed registries (`Registry[T]`) backed by runtime protocols:
-- **CA-1 World / Layout:** `WorldGenerator` (parametric generator and ASCII layout loader).
-- **CA-2 Catalogue / Orders:** `CatalogueSource` (`generated`, `csv`) and `OrderSource`.
-- **CA-3 Business Rules:** Declarative YAML rule engine (placement, movement zones, alerts, AI gating).
-- **CA-4 Configuration:** Layered hierarchy (`defaults.yaml` < `scenario.yaml` < `ROBOFLEET_*` env < CLI `--set`).
-- **CA-5 Dispatcher & Planner:** `TaskDispatcher` (`wander`) and `MovementPlanner` (`astar_flow`).
-- **CA-6 Operations Brain:** `Brain` interface (Phase 5).
-- **CA-7 Metrics:** `MetricProvider` for fleet KPIs (Phase 3).
-- **CA-8 Fault Injection:** `FaultInjector` for chaos experiments (Phase 6).
-- **CA-9 Visualization & Sinks:** `EventSink` streaming outputs (`events.ndjson`, snapshots).
+1. **Specialist Consolidation**: Exactly 1 Mission Orchestrator coordinates 4 specialized roles:
+   - `PlannerSpecialist`: order prioritization & pick load balancing.
+   - `TrafficFleetSpecialist`: AMR charging & junction congestion bypass.
+   - `ExceptionsRecoverySpecialist`: zone isolation & human escalation.
+   - `ExplainerSpecialist`: grounded plain-language rationale synthesis.
+2. **Deterministic Situation Brief**: Extracts bounded operational summary from live state, hashed via SHA256. Zero unbounded prompt injection.
+3. **Governance Seam (CA-3)**: All AI actions are typed commands (`BrainBaseCommand`) evaluated against declarative YAML rules in `rules/`. Commands can be approved, denied, or queued for human approval.
+4. **Anti-Hallucination Gate**: Explainer strictly verifies all referenced entity IDs against the brief before emission.
+5. **Failover Invariant**: LLM errors or network drops instantly trigger the fast deterministic heuristic baseline within one simulation tick ($< 1$ms).

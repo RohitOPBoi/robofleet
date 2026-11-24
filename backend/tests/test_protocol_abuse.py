@@ -11,8 +11,8 @@ Verifies server resilience under:
 from __future__ import annotations
 
 import json
-
 import pytest
+
 from robofleet.api.app import create_app
 from robofleet.catalogue.generator import generate_catalogue
 from robofleet.catalogue.slotting import slot_inventory

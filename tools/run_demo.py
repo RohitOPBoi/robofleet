@@ -21,12 +21,12 @@ def main() -> int:
             return res.returncode
 
     print("=" * 70)
-    print("  ROBOFLEET LIVE COMMAND CENTRE — PHASE 2")
+    print("  ROBOFLEET AUTONOMOUS ROBOT COMMAND CENTRE & DIGITAL TWIN")
     print("=" * 70)
     print("  - Command Centre UI:     http://localhost:8000")
     print("  - OpenAPI Documentation: http://localhost:8000/docs")
     print("  - WebSocket Streaming:   ws://localhost:8000/ws")
-    print("  - Single Disclosure API: http://localhost:8000/api/environment")
+    print("  - Environment Status:    http://localhost:8000/api/environment")
     print("=" * 70)
     print("Starting simulation server with standard scenario (20 AMRs, demand engine)...")
     print("Press Ctrl+C to stop.\n")
@@ -35,7 +35,16 @@ def main() -> int:
     try:
         from robofleet.cli.main import main as cli_main
 
-        sys.argv = ["robofleet", "serve", "--scenario", "standard", "--port", "8000"]
+        sys.argv = [
+            "robofleet",
+            "serve",
+            "--scenario",
+            "standard",
+            "--port",
+            "8000",
+            "--set",
+            "dispatcher.type=robot_supervisor",
+        ]
         return cli_main()
     except KeyboardInterrupt:
         print("\n[Demo] Server stopped cleanly.")

@@ -141,10 +141,10 @@ export const ReplayTimeline: React.FC = () => {
             type="button"
             onClick={() => setIsRecordingsMenuOpen(!isRecordingsMenuOpen)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-cyan-400 border border-gray-700/80 shadow-lg backdrop-blur-md text-xs font-semibold tracking-wide transition cursor-pointer"
-            title="Load an offline recorded run for stage-safe demo"
+            title="Load an archived operations recording for timeline inspection"
           >
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span>Replay Stage Demo</span>
+            <span>Replay Operations Run</span>
             <span className="text-[10px] text-gray-500 font-mono">P7-A3</span>
           </button>
 

@@ -62,8 +62,12 @@ def generate_parametric_layout(
             grid[(st_x, bottom_y)] = Cell(
                 pos=st_pos, cell_type=CellType.STATION, flow=Flow.BOTH, zone="picking_stations"
             )
-            # Queue cells leading up north
-            q_cells = [Coordinate(x=st_x, y=bottom_y - 1)]
+            # Queue cells leading up north (offset by x-1 so dock exit remains clear)
+            q_cells = [
+                Coordinate(x=st_x - 1, y=bottom_y - 1),
+                Coordinate(x=st_x - 1, y=bottom_y - 2),
+                Coordinate(x=st_x - 1, y=bottom_y - 3),
+            ]
             stations.append(
                 Station(
                     station_id=f"ST-{s_idx + 1:02d}",
@@ -136,18 +140,22 @@ def generate_parametric_layout(
                 metadata={"temperature_zone": temp_zone},
             )
 
-        # Flow lanes for aisle if right_hand_traffic is enabled
+        # Flow lanes for aisle if right_hand_traffic is enabled (only inside rack aisles; cross-aisles and station zones remain Flow.BOTH)
         aisle_top_y = current_y - 1
         aisle_bottom_y = current_y + 2
         if config.right_hand_traffic:
-            for rx in range(rack_start_x - 1, rack_end_x + 1):
-                if (rx, aisle_top_y) in grid and grid[
-                    (rx, aisle_top_y)
-                ].cell_type == CellType.FLOOR:
+            for rx in range(rack_start_x, rack_end_x):
+                if (
+                    (rx, aisle_top_y) in grid
+                    and grid[(rx, aisle_top_y)].cell_type == CellType.FLOOR
+                    and aisle_top_y < bottom_y - 2
+                ):
                     grid[(rx, aisle_top_y)].flow = Flow.E
-                if (rx, aisle_bottom_y) in grid and grid[
-                    (rx, aisle_bottom_y)
-                ].cell_type == CellType.FLOOR:
+                if (
+                    (rx, aisle_bottom_y) in grid
+                    and grid[(rx, aisle_bottom_y)].cell_type == CellType.FLOOR
+                    and aisle_bottom_y < bottom_y - 2
+                ):
                     grid[(rx, aisle_bottom_y)].flow = Flow.W
 
         current_y += 2 + config.aisle_width

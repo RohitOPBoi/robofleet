@@ -101,6 +101,23 @@
       "default": null,
       "title": "Bin Id"
     },
+    "sku_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sku Id"
+    },
+    "quantity": {
+      "default": 1,
+      "title": "Quantity",
+      "type": "integer"
+    },
     "station_id": {
       "anyOf": [
         {

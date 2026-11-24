@@ -1,17 +1,38 @@
 {
   "_comment": "Allowlist for necessary mathematical, dimensional, or algorithmic constants with explanation per entry",
   "backend/src/robofleet/sim/clock.py": [
-    {"value": 1000, "comment": "Milliseconds per second conversion factor"},
-    {"value": 10, "comment": "Fallback tick frequency in Hz"}
+    {
+      "value": 1000,
+      "comment": "Milliseconds per second conversion factor"
+    },
+    {
+      "value": 10,
+      "comment": "Fallback tick frequency in Hz"
+    }
   ],
   "backend/src/robofleet/sim/safety.py": [
-    {"value": 1000, "comment": "Permille progress scaling (100% = 1000)"}
+    {
+      "value": 1000,
+      "comment": "Permille progress scaling (100% = 1000)"
+    }
   ],
   "backend/src/robofleet/sim/planner.py": [
-    {"value": 1000, "comment": "Permille progress scaling (100% = 1000)"},
-    {"value": 10, "comment": "Default replan wait ticks"},
-    {"value": 30, "comment": "Default yield wait ticks"},
-    {"value": 60, "comment": "Default deadlock threshold ticks"}
+    {
+      "value": 1000,
+      "comment": "Permille progress scaling (100% = 1000)"
+    },
+    {
+      "value": 10,
+      "comment": "Default replan wait ticks"
+    },
+    {
+      "value": 30,
+      "comment": "Default yield wait ticks"
+    },
+    {
+      "value": 60,
+      "comment": "Default deadlock threshold ticks"
+    }
   ],
   "backend/src/robofleet/sim/engine.py": [
     {"value": 10, "comment": "Fallback replan wait ticks"},
@@ -19,64 +40,231 @@
     {"value": 60, "comment": "Fallback deadlock threshold ticks"},
     {"value": 20, "comment": "Fallback dwell ticks"},
     {"value": 85.0, "comment": "Initial minimum battery percentage for AMR startup"},
-    {"value": 100.0, "comment": "Initial maximum battery percentage for AMR startup"}
+    {"value": 100.0, "comment": "Initial maximum battery percentage for AMR startup"},
+    {"value": 150, "comment": "Default at-risk order deadline threshold ticks"}
   ],
   "backend/src/robofleet/sim/dispatcher.py": [
-    {"value": 20, "comment": "Fallback dwell ticks"}
+    {
+      "value": 20,
+      "comment": "Fallback dwell ticks"
+    }
   ],
   "backend/src/robofleet/sim/rng.py": [
-    {"value": 42, "comment": "Default root seed for deterministic simulation"}
+    {
+      "value": 42,
+      "comment": "Default root seed for deterministic simulation"
+    }
   ],
   "backend/src/robofleet/sim/runner.py": [
-    {"value": 2, "comment": "Float decimal places for reporting"},
-    {"value": 3, "comment": "Float decimal places for reporting"},
-    {"value": 0.001, "comment": "Division by zero guard"}
+    {
+      "value": 2,
+      "comment": "Float decimal places for reporting"
+    },
+    {
+      "value": 3,
+      "comment": "Float decimal places for reporting"
+    },
+    {
+      "value": 0.001,
+      "comment": "Division by zero guard"
+    }
   ],
   "backend/src/robofleet/layout/renderer.py": [
-    {"value": 2, "comment": "Border padding for ASCII diagram formatting"}
+    {
+      "value": 2,
+      "comment": "Border padding for ASCII diagram formatting"
+    }
   ],
   "backend/src/robofleet/layout/ascii_loader.py": [
-    {"value": 0.8, "comment": "Default square cell dimension in metres"}
+    {
+      "value": 0.8,
+      "comment": "Default square cell dimension in metres"
+    }
   ],
   "backend/src/robofleet/layout/generator.py": [
-    {"value": 0.8, "comment": "Default square cell dimension in metres"},
-    {"value": 2, "comment": "Layout geometric spacing for aisles and offsets"},
-    {"value": 3, "comment": "Layout geometric spacing for aisles and offsets"},
-    {"value": 4, "comment": "Layout geometric spacing for aisles and offsets"},
-    {"value": 5, "comment": "Layout geometric spacing for aisles and offsets"},
-    {"value": 6, "comment": "Layout geometric spacing for aisles and offsets"},
-    {"value": 7, "comment": "Layout geometric spacing for aisles and offsets"}
+    {
+      "value": 0.8,
+      "comment": "Default square cell dimension in metres"
+    },
+    {
+      "value": 2,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    },
+    {
+      "value": 3,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    },
+    {
+      "value": 4,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    },
+    {
+      "value": 5,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    },
+    {
+      "value": 6,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    },
+    {
+      "value": 7,
+      "comment": "Layout geometric spacing for aisles and offsets"
+    }
   ],
   "backend/src/robofleet/catalogue/generator.py": [
-    {"value": 0.20, "comment": "Dairy market category share"},
-    {"value": 0.18, "comment": "Produce market category share"},
-    {"value": 0.16, "comment": "Staples market category share"},
-    {"value": 0.14, "comment": "Snacks market category share"},
-    {"value": 0.12, "comment": "Bakery market category share"},
-    {"value": 0.10, "comment": "Beverages market category share"},
-    {"value": 0.06, "comment": "Household market category share"},
-    {"value": 0.04, "comment": "Frozen market category share"},
-    {"value": 50, "comment": "SKU catalog generation hashing modulus"},
-    {"value": 150, "comment": "Default packaging length in mm"},
-    {"value": 100, "comment": "Default packaging width/height in mm"},
-    {"value": 90, "comment": "Default shelf life in days"},
-    {"value": 3000, "comment": "Large size class weight threshold in grams"},
-    {"value": 300, "comment": "Small size class weight threshold in grams"},
-    {"value": 4000, "comment": "Heavy item handling difficulty threshold in grams"},
-    {"value": 1.5, "comment": "Fragile item handling difficulty factor"},
-    {"value": 2.0, "comment": "Heavy item handling difficulty factor"}
+    {
+      "value": 0.20,
+      "comment": "Dairy market category share"
+    },
+    {
+      "value": 0.18,
+      "comment": "Produce market category share"
+    },
+    {
+      "value": 0.16,
+      "comment": "Staples market category share"
+    },
+    {
+      "value": 0.14,
+      "comment": "Snacks market category share"
+    },
+    {
+      "value": 0.12,
+      "comment": "Bakery market category share"
+    },
+    {
+      "value": 0.10,
+      "comment": "Beverages market category share"
+    },
+    {
+      "value": 0.06,
+      "comment": "Household market category share"
+    },
+    {
+      "value": 0.04,
+      "comment": "Frozen market category share"
+    },
+    {
+      "value": 50,
+      "comment": "SKU catalog generation hashing modulus"
+    },
+    {
+      "value": 150,
+      "comment": "Default packaging length in mm"
+    },
+    {
+      "value": 100,
+      "comment": "Default packaging width/height in mm"
+    },
+    {
+      "value": 90,
+      "comment": "Default shelf life in days"
+    },
+    {
+      "value": 3000,
+      "comment": "Large size class weight threshold in grams"
+    },
+    {
+      "value": 300,
+      "comment": "Small size class weight threshold in grams"
+    },
+    {
+      "value": 4000,
+      "comment": "Heavy item handling difficulty threshold in grams"
+    },
+    {
+      "value": 1.5,
+      "comment": "Fragile item handling difficulty factor"
+    },
+    {
+      "value": 2.0,
+      "comment": "Heavy item handling difficulty factor"
+    }
   ],
   "backend/src/robofleet/catalogue/slotting.py": [
-    {"value": 5000, "comment": "Ergonomic heavy item threshold in grams"},
-    {"value": 4, "comment": "Top shelf ergonomic level threshold"},
-    {"value": 15, "comment": "Minimum initial bin fill quantity"},
-    {"value": 50, "comment": "Default bin item capacity"},
-    {"value": 25000, "comment": "Default bin maximum weight in grams"},
-    {"value": 100.0, "comment": "Empty bin probability percentage base"}
+    {
+      "value": 5000,
+      "comment": "Ergonomic heavy item threshold in grams"
+    },
+    {
+      "value": 4,
+      "comment": "Top shelf ergonomic level threshold"
+    },
+    {
+      "value": 15,
+      "comment": "Minimum initial bin fill quantity"
+    },
+    {
+      "value": 50,
+      "comment": "Default bin item capacity"
+    },
+    {
+      "value": 25000,
+      "comment": "Default bin maximum weight in grams"
+    },
+    {
+      "value": 100.0,
+      "comment": "Empty bin probability percentage base"
+    }
   ],
   "backend/src/robofleet/sim/dispatcher.py": [
-    {"value": 2, "comment": "Charger approach staging offset in grid cells"},
-    {"value": 20, "comment": "Default fallback dwell ticks for wander dispatcher"},
-    {"value": 95.0, "comment": "Default fallback recharge target percentage"}
+    {
+      "value": 2,
+      "comment": "Charger approach staging offset in grid cells"
+    },
+    {
+      "value": 20,
+      "comment": "Default fallback dwell ticks for wander dispatcher"
+    },
+    {
+      "value": 95.0,
+      "comment": "Default fallback recharge target percentage"
+    }
+  ],
+  "backend/src/robofleet/adapters/csv_replay.py": [
+    {"value": 10, "comment": "Fallback tick frequency in Hz"},
+    {"value": 2, "comment": "CSV line items split dimension minimum"}
+  ],
+  "backend/src/robofleet/adapters/demand_engine.py": [
+    {"value": 42, "comment": "Fallback seed for Poisson random generator"},
+    {"value": 10, "comment": "Fallback tick frequency in Hz"},
+    {"value": 0.2, "comment": "Fallback urgent order fraction"},
+    {"value": 2.5, "comment": "Default rush overlay order arrival multiplier"},
+    {"value": 300, "comment": "Default rush duration in seconds"},
+    {"value": 3600.0, "comment": "Seconds per hour conversion factor"},
+    {"value": 3600, "comment": "Seconds per hour conversion factor"},
+    {"value": 101, "comment": "CDF percentage array indexing size"},
+    {"value": 120.0, "comment": "Fallback orders per hour base rate"},
+    {"value": 24, "comment": "Hours per day diurnal cycle"},
+    {"value": 5, "comment": "Express SLA priority level"},
+    {"value": 0.8, "comment": "Off-peak scaling factor"},
+    {"value": 1.5, "comment": "Rain overlay multiplier"},
+    {"value": 8, "comment": "Default max basket items limit"},
+    {"value": 3, "comment": "Urgent order priority level"},
+    {"value": 3.5, "comment": "Default Poisson mean basket size"},
+    {"value": 60, "comment": "Seconds per minute conversion factor"},
+    {"value": 20, "comment": "Express SLA window in minutes"}
+  ],
+  "backend/src/robofleet/adapters/webhook.py": [
+    {"value": 50, "comment": "Default max orders per second rate limit"},
+    {"value": 2000, "comment": "Default max un-polled orders queue depth"},
+    {"value": 600, "comment": "Default order deadline offset in seconds"}
+  ],
+  "backend/src/robofleet/api/app.py": [
+    {"value": 0.1, "comment": "Minimum simulation speed multiplier"},
+    {"value": 20.0, "comment": "Maximum simulation speed multiplier"},
+    {"value": 2.5, "comment": "Default rush multiplier"},
+    {"value": 10.0, "comment": "Maximum rush multiplier allowed"},
+    {"value": 300, "comment": "Default rush duration in seconds"},
+    {"value": 10, "comment": "Minimum rush duration in seconds"},
+    {"value": 3600, "comment": "Maximum rush duration in seconds"},
+    {"value": 8, "comment": "Request correlation ID hex token length"}
+  ],
+  "backend/src/robofleet/api/ws.py": [
+    {"value": 20, "comment": "WebSocket outbound message backpressure queue size"}
+  ],
+  "backend/src/robofleet/sim/pacer.py": [
+    {"value": 0.1, "comment": "Minimum pacing speed multiplier"},
+    {"value": 20.0, "comment": "Maximum pacing speed multiplier"}
   ]
 }

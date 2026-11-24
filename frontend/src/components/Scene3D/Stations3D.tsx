@@ -23,41 +23,44 @@ const chargerPillarGeometry = new THREE.BoxGeometry(0.18, 0.9, 0.18);
 const humanTorsoGeometry = new THREE.CylinderGeometry(0.14, 0.16, 0.45, 12);
 const humanHeadGeometry = new THREE.SphereGeometry(0.1, 12, 12);
 
-// Materials
+// Materials (Clean White Architecture with Vibrant Work Surfaces)
 const stationDeskMat = new THREE.MeshStandardMaterial({
-  color: 0x064e3b,
-  roughness: 0.4,
-  metalness: 0.4,
+  color: 0xffffff, // Pure crisp white booth
+  roughness: 0.2,
+  metalness: 0.1,
 });
 
-const monitorBezelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.3 });
-const monitorScreenMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+const monitorBezelMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2 });
+const monitorScreenMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
 const supervisorScreenMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
 
 const chargerBaseMat = new THREE.MeshStandardMaterial({
-  color: 0x78350f,
-  roughness: 0.3,
-  metalness: 0.6,
+  color: 0xffffff, // Crisp clean white charger pillar
+  roughness: 0.2,
+  metalness: 0.15,
 });
 const chargerGlowMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
 
 const dispatchCounterMat = new THREE.MeshStandardMaterial({
-  color: 0x4c1d95,
-  roughness: 0.4,
-  metalness: 0.3,
+  color: 0xffffff, // Crisp white dispatch counter
+  roughness: 0.2,
+  metalness: 0.1,
 });
 
 const supervisorDeskMat = new THREE.MeshStandardMaterial({
-  color: 0x1e293b,
-  roughness: 0.5,
-  metalness: 0.5,
+  color: 0xf8fafc, // Modern architectural executive desk
+  roughness: 0.25,
+  metalness: 0.2,
 });
 
-const workerClothingMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.7 });
-const supervisorClothingMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6 });
+const workerClothingMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.6 });
+const supervisorClothingMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.6 });
+const courierClothingMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.5 });
+const courierHelmetMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3 });
+const courierBackpackMat = new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.4 });
 
 export const Stations3D: React.FC = () => {
-  const { staticWorld } = useStore();
+  const { staticWorld, activeFaults } = useStore();
   const layout = staticWorld?.layout;
 
   // Picking Stations
@@ -91,30 +94,79 @@ export const Stations3D: React.FC = () => {
   return (
     <group>
       {/* 1. Picking Stations */}
-      {stations.map((pos: { x: number; y: number }, i: number) => (
-        <group key={`station-${i}`} position={[pos.x, 0, pos.y]}>
-          {/* Station Desk Counter */}
-          <mesh geometry={deskGeometry} material={stationDeskMat} position={[0, 0.4, 0]} castShadow receiveShadow />
+      {stations.map((pos: { x: number; y: number }, i: number) => {
+        const stationId = `STATION-0${i + 1}`;
+        const fault = activeFaults.find(
+          (f) =>
+            (f.target_id === stationId || f.target_id === `ST-${i + 1}`) &&
+            (f.fault_type === "station_offline" || f.fault_type === "station_slowdown")
+        );
+        const isOffline = fault?.fault_type === "station_offline";
+        const isSlowdown = fault?.fault_type === "station_slowdown";
 
-          {/* Computer Monitor */}
-          <mesh geometry={standGeometry} material={monitorBezelMat} position={[0, 0.88, -0.1]} />
-          <mesh geometry={monitorGeometry} material={monitorBezelMat} position={[0, 1.05, -0.1]} castShadow>
-            <mesh geometry={monitorGeometry} material={monitorScreenMat} position={[0, 0, 0.03]} scale={[0.9, 0.85, 0.2]} />
-          </mesh>
+        return (
+          <group key={`station-${i}`} position={[pos.x, 0, pos.y]}>
+            {/* Station Desk Counter */}
+            <mesh
+              geometry={deskGeometry}
+              material={
+                isOffline
+                  ? new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.5 })
+                  : stationDeskMat
+              }
+              position={[0, 0.4, 0]}
+              castShadow
+              receiveShadow
+            />
 
-          {/* Simulated Worker Figure */}
-          <group position={[0, 0.8, -0.45]}>
-            <mesh geometry={humanTorsoGeometry} material={workerClothingMat} position={[0, 0.4, 0]} castShadow />
-            <mesh geometry={humanHeadGeometry} material={workerClothingMat} position={[0, 0.72, 0]} castShadow />
+            {/* Fault Warning Strobe */}
+            {(isOffline || isSlowdown) && (
+              <group position={[0, 1.4, 0]}>
+                <mesh>
+                  <sphereGeometry args={[0.08, 16, 16]} />
+                  <meshBasicMaterial color={isOffline ? "#EF4444" : "#F59E0B"} />
+                </mesh>
+                <pointLight
+                  color={isOffline ? "#EF4444" : "#F59E0B"}
+                  intensity={3.0}
+                  distance={3.0}
+                />
+              </group>
+            )}
+
+            {/* Computer Monitor */}
+            <mesh geometry={standGeometry} material={monitorBezelMat} position={[0, 0.88, -0.1]} />
+            <mesh geometry={monitorGeometry} material={monitorBezelMat} position={[0, 1.05, -0.1]} castShadow>
+              <mesh
+                geometry={monitorGeometry}
+                material={
+                  isOffline
+                    ? new THREE.MeshBasicMaterial({ color: 0xef4444 })
+                    : monitorScreenMat
+                }
+                position={[0, 0, 0.03]}
+                scale={[0.9, 0.85, 0.2]}
+              />
+            </mesh>
+
+            {/* Simulated Worker Figure */}
+            <group position={[0, 0.8, -0.45]}>
+              <mesh geometry={humanTorsoGeometry} material={workerClothingMat} position={[0, 0.4, 0]} castShadow />
+              <mesh geometry={humanHeadGeometry} material={workerClothingMat} position={[0, 0.72, 0]} castShadow />
+            </group>
+
+            {/* Queue Dock Indicator Ring */}
+            <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, 0.8]}>
+              <ringGeometry args={[0.3, 0.38, 16]} />
+              <meshBasicMaterial
+                color={isOffline ? "#EF4444" : isSlowdown ? "#F59E0B" : "#10B981"}
+                transparent
+                opacity={0.6}
+              />
+            </mesh>
           </group>
-
-          {/* Queue Dock Indicator Ring */}
-          <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, 0.8]}>
-            <ringGeometry args={[0.3, 0.38, 16]} />
-            <meshBasicMaterial color="#10B981" transparent opacity={0.6} />
-          </mesh>
-        </group>
-      ))}
+        );
+      })}
 
       {/* 2. Charging Bank */}
       {chargers.map((pos: { x: number; y: number }, i: number) => (
@@ -136,14 +188,32 @@ export const Stations3D: React.FC = () => {
         </group>
       ))}
 
-      {/* 3. Dispatch Bay Counter */}
+      {/* 3. Dispatch Bay Counter & Delivery Rider Couriers */}
       {dispatchCells.map((pos: { x: number; y: number }, i: number) => (
         <group key={`dispatch-${i}`} position={[pos.x, 0, pos.y]}>
           <mesh geometry={deskGeometry} material={dispatchCounterMat} position={[0, 0.4, 0]} castShadow receiveShadow />
           <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, 0]}>
             <planeGeometry args={[0.9, 0.9]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.2} />
+            <meshBasicMaterial color="#10B981" transparent opacity={0.25} />
           </mesh>
+
+          {/* Delivery Guy (Courier Rider) standing at counter ready for handover */}
+          <group position={[0, 0, 0.45]} rotation-y={Math.PI}>
+            {/* Courier Body */}
+            <mesh geometry={humanTorsoGeometry} material={courierClothingMat} position={[0, 0.4, 0]} castShadow />
+            {/* Courier Helmet */}
+            <mesh geometry={humanHeadGeometry} material={courierHelmetMat} position={[0, 0.72, 0]} castShadow />
+            {/* Delivery Backpack */}
+            <mesh position={[0, 0.42, 0.16]} castShadow>
+              <boxGeometry args={[0.3, 0.35, 0.16]} />
+              <meshStandardMaterial color="#047857" roughness={0.4} />
+            </mesh>
+            {/* Delivery Status Glow Marker */}
+            <mesh position={[0, 0.95, 0]}>
+              <sphereGeometry args={[0.04, 8, 8]} />
+              <meshBasicMaterial color="#10B981" />
+            </mesh>
+          </group>
         </group>
       ))}
 

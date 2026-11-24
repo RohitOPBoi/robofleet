@@ -174,20 +174,23 @@ class AStarFlowPlanner:
             if path and len(path) > 1:
                 self._cached_paths[robot.robot_id] = path[1:]
                 next_cell = path[1]
-                # If next cell is occupied and blocked for >= yield_wait_ticks, try yield move
-                if (
-                    next_cell.x,
-                    next_cell.y,
-                ) in other_robots and robot.blocked_ticks >= self.yield_wait_ticks:
+                # If next cell is occupied by another robot, do not attempt to walk into it
+                if (next_cell.x, next_cell.y) in other_robots:
+                    self._cached_paths.pop(robot.robot_id, None)
+                    # Look for immediate adjacent walkable bypass toward target
                     free_neighbors = _get_flow_neighbors(
                         robot.cell, grid, set(hard_obstacles) | other_robots
                     )
                     if free_neighbors:
-                        yield_cell = free_neighbors[rng.integers(0, len(free_neighbors))]
+                        bypass_cell = min(free_neighbors, key=lambda n: n.manhattan_distance(target))
                         intents[robot.robot_id] = MoveIntent(
-                            robot_id=robot.robot_id, to_cell=yield_cell
+                            robot_id=robot.robot_id, to_cell=bypass_cell
                         )
                         continue
+
+                    # If trapped with no bypass, wait in place cleanly without causing safety denial
+                    intents[robot.robot_id] = MoveIntent(robot_id=robot.robot_id, to_cell=robot.cell)
+                    continue
 
                 intents[robot.robot_id] = MoveIntent(
                     robot_id=robot.robot_id,

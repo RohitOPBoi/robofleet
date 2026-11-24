@@ -38,6 +38,7 @@ class SyntheticDemandEngine(OrderSource):
         self.overlay_multiplier: float = 1.0
         self.overlay_remaining_ticks: int = 0
         self.order_counter: int = 0
+        self._queued_immediate_orders: list[Order] = []
 
         # Dedicated RNG stream
         self.rng = np.random.default_rng(seed + 101)
@@ -84,18 +85,65 @@ class SyntheticDemandEngine(OrderSource):
         self.overlay_multiplier = 1.0
         self.overlay_remaining_ticks = 0
 
-    def trigger_rush(self, multiplier: float = 2.5, duration_s: int = 300) -> None:
-        """Trigger an immediate demand rush."""
+    def _create_synthetic_order(self, current_tick: int = 0, priority: int = 5) -> Order:
+        self.order_counter += 1
+        order_id = f"ORD-{self.order_counter:06d}"
+        basket_size = int(np.clip(self.rng.poisson(lam=3.5), 1, 8))
+        chosen_sku_indices = self.rng.choice(
+            len(self.skus),
+            size=basket_size,
+            replace=(basket_size > len(self.skus)),
+            p=self.sku_probabilities,
+        )
+        lines: list[OrderLine] = []
+        for idx in chosen_sku_indices:
+            sku = self.skus[idx]
+            qty = int(self.rng.integers(1, 3))
+            lines.append(OrderLine(sku_id=sku.sku_id, quantity=qty))
+        sla_tier = "express" if priority >= 5 else "standard"
+        sla_ticks = int((10 if priority >= 5 else 20) * 60 * self.tick_hz)
+        deadline_tick = current_tick + sla_ticks
+        return Order(
+            order_id=order_id,
+            lines=lines,
+            status=OrderStatus.QUEUED,
+            priority=priority,
+            created_tick=current_tick,
+            deadline_tick=deadline_tick,
+            at_risk=False,
+            sla_tier=sla_tier,
+        )
+
+    def inject_rush_orders(self, count: int = 6, current_tick: int = 0) -> list[Order]:
+        """Immediately generates a burst of express orders into the demand queue."""
+        if not self.skus:
+            return []
+        burst: list[Order] = []
+        for _ in range(count):
+            burst.append(self._create_synthetic_order(current_tick=current_tick, priority=5))
+        self._queued_immediate_orders.extend(burst)
+        return burst
+
+    def trigger_rush(self, multiplier: float = 2.5, duration_s: int = 300, burst_count: int = 6) -> None:
+        """Trigger an immediate demand rush with both overlay multiplier and immediate order burst."""
         self.apply_overlay(
             name="rush",
             multiplier=multiplier,
             duration_ticks=int(duration_s * self.tick_hz),
         )
+        if burst_count > 0:
+            self.inject_rush_orders(count=burst_count)
 
     def poll_orders(self, current_tick: int) -> list[Order]:
         """Poll for new orders arriving at the current simulation tick."""
         if not self.skus:
             return []
+
+        new_orders: list[Order] = []
+        # Immediately drain any queued burst/rush orders
+        if self._queued_immediate_orders:
+            new_orders.extend(self._queued_immediate_orders)
+            self._queued_immediate_orders.clear()
 
         # Countdown active overlay
         if self.overlay_remaining_ticks > 0:
@@ -117,7 +165,6 @@ class SyntheticDemandEngine(OrderSource):
 
         # Sample Poisson arrivals
         arrival_count = int(self.rng.poisson(lam=lambda_tick))
-        new_orders: list[Order] = []
 
         for _ in range(arrival_count):
             self.order_counter += 1

@@ -440,6 +440,11 @@
           "default": "simulated_human",
           "title": "Worker Kind",
           "type": "string"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
         }
       },
       "required": [

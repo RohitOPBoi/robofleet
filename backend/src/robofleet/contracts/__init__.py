@@ -1,6 +1,24 @@
 """RoboFleet contracts package."""
 
 from robofleet.contracts.alert import Alert, AlertCategory, AlertSeverity
+from robofleet.contracts.brain import (
+    ApprovalRequest,
+    AssignTaskCommand,
+    BatchOrdersCommand,
+    BrainBaseCommand,
+    BrainCommandUnion,
+    EscalateToHumanCommand,
+    HoldZoneCommand,
+    NoActionCommand,
+    ReleaseZoneCommand,
+    ReprioritiseOrderCommand,
+    RerouteRobotCommand,
+    SendToChargeCommand,
+    SetStationPolicyCommand,
+    SetStrategyParamsCommand,
+    SituationBrief,
+    SupervisorQuery,
+)
 from robofleet.contracts.catalogue import Bin, HazardClass, Sku, TemperatureClass
 from robofleet.contracts.commands import (
     BlockCellsCommand,

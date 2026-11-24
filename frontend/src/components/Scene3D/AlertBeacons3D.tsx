@@ -54,13 +54,37 @@ const SingleBeacon: React.FC<{ alert: Alert }> = ({ alert }) => {
 };
 
 export const AlertBeacons3D: React.FC = () => {
-  const { alerts } = useStore();
+  const { alerts, activeFaults, robots } = useStore();
   const activeAlerts = alerts.filter((a) => !a.cleared && a.coord);
+
+  // Convert coordinate-based chaos faults into visual alert beacons
+  const faultBeacons = activeFaults.flatMap((f) => {
+    if (f.target_id.startsWith("cell:")) {
+      const parts = f.target_id.replace("cell:", "").split(",");
+      if (parts.length === 2) {
+        return [
+          {
+            id: f.fault_id,
+            coord: { x: Number(parts[0]) || 0, y: Number(parts[1]) || 0 },
+            severity: "CRITICAL" as const,
+            category: "CHAOS_FAULT",
+            message: `Aisle Blockage: ${f.fault_type}`,
+            requires_human: true,
+            cleared: false,
+            tick: f.injected_tick,
+          },
+        ];
+      }
+    }
+    return [];
+  });
+
+  const allBeacons = [...activeAlerts, ...faultBeacons];
 
   return (
     <group>
-      {activeAlerts.map((alert) => (
-        <SingleBeacon key={alert.id} alert={alert} />
+      {allBeacons.map((alert) => (
+        <SingleBeacon key={alert.id} alert={alert as any} />
       ))}
     </group>
   );

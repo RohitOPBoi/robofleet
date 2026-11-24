@@ -73,6 +73,38 @@ class BaseFault(ABC):
         ...
 
 
+def _find_target_robot(engine: Any, target_id: str) -> Any | None:
+    robots = getattr(engine, "robots", [])
+    if not robots:
+        return None
+    for r in robots:
+        if r.robot_id == target_id:
+            return r
+    t_digits = "".join(c for c in str(target_id) if c.isdigit())
+    if t_digits:
+        for r in robots:
+            r_digits = "".join(c for c in str(r.robot_id) if c.isdigit())
+            if r_digits and int(t_digits) == int(r_digits):
+                return r
+    return robots[0]
+
+
+def _find_target_station(engine: Any, target_id: str) -> Any | None:
+    stations = getattr(getattr(engine, "layout", None), "stations", [])
+    if not stations:
+        return None
+    for s in stations:
+        if s.station_id == target_id:
+            return s
+    t_digits = "".join(c for c in str(target_id) if c.isdigit())
+    if t_digits:
+        for s in stations:
+            s_digits = "".join(c for c in str(s.station_id) if c.isdigit())
+            if s_digits and int(t_digits) == int(s_digits):
+                return s
+    return stations[0]
+
+
 class RobotBreakdownFault(BaseFault):
     """AMR motor, drivetrain, or hardware breakdown."""
 
@@ -83,6 +115,9 @@ class RobotBreakdownFault(BaseFault):
     def inject(self, engine: Any, tick: int) -> None:
         self.injected_tick = tick
         self.is_active = True
+        target_robot = _find_target_robot(engine, self.target_id)
+        if target_robot:
+            self.target_id = target_robot.robot_id
         self.degraded_mode_name = f"AMR {self.target_id} hardware breakdown"
 
         for robot in getattr(engine, "robots", []):
@@ -148,6 +183,9 @@ class RobotCommsDropFault(BaseFault):
     def inject(self, engine: Any, tick: int) -> None:
         self.injected_tick = tick
         self.is_active = True
+        target_robot = _find_target_robot(engine, self.target_id)
+        if target_robot:
+            self.target_id = target_robot.robot_id
         self.degraded_mode_name = f"AMR {self.target_id} radio link lost"
 
         for robot in getattr(engine, "robots", []):
@@ -350,6 +388,9 @@ class StationSlowdownFault(BaseFault):
     def inject(self, engine: Any, tick: int) -> None:
         self.injected_tick = tick
         self.is_active = True
+        target_station = _find_target_station(engine, self.target_id)
+        if target_station:
+            self.target_id = target_station.station_id
         self.degraded_mode_name = f"Picking station {self.target_id} throughput halved"
 
         if hasattr(engine, "station_mgr") and hasattr(engine.station_mgr, "base_pick_time_ticks"):
@@ -382,6 +423,9 @@ class StationOfflineFault(BaseFault):
     def inject(self, engine: Any, tick: int) -> None:
         self.injected_tick = tick
         self.is_active = True
+        target_station = _find_target_station(engine, self.target_id)
+        if target_station:
+            self.target_id = target_station.station_id
         self.degraded_mode_name = f"Station {self.target_id} offline: rerouting traffic"
 
         if hasattr(engine, "station_mgr"):

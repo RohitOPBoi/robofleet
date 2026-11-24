@@ -40,21 +40,21 @@ const FAULT_DEFINITIONS: {
     label: "Robot Breakdown",
     category: "Robot",
     desc: "Motor stall / mechanical lockup halt",
-    defaultTarget: "R-01",
+    defaultTarget: "R-001",
   },
   {
     type: "robot_comms_drop",
     label: "Comms Dropout",
     category: "Robot",
     desc: "RF packet loss & telemetry silence",
-    defaultTarget: "R-02",
+    defaultTarget: "R-002",
   },
   {
     type: "battery_cascade",
     label: "Battery Cascade",
     category: "Robot",
     desc: "Accelerated discharge trigger below 15%",
-    defaultTarget: "R-03",
+    defaultTarget: "R-003",
   },
   {
     type: "aisle_blocked",
@@ -82,14 +82,14 @@ const FAULT_DEFINITIONS: {
     label: "Station Slowdown",
     category: "Station",
     desc: "Ergonomic lag / scanner latency at station",
-    defaultTarget: "STATION-01",
+    defaultTarget: "ST-01",
   },
   {
     type: "station_offline",
     label: "Station Offline",
     category: "Station",
     desc: "Thermal trip or safety E-stop tripping station offline",
-    defaultTarget: "STATION-01",
+    defaultTarget: "ST-01",
   },
   {
     type: "urgent_order_burst",
@@ -112,7 +112,7 @@ export const ChaosControlModal: React.FC = () => {
   const { isChaosControlOpen, activeFaults, degradedModes, robots, kpis } = store;
 
   const [selectedFault, setSelectedFault] = useState<FaultType>("robot_breakdown");
-  const [targetId, setTargetId] = useState<string>("R-01");
+  const [targetId, setTargetId] = useState<string>("R-001");
   const [durationTicks, setDurationTicks] = useState<number>(200);
   const [submitting, setSubmitting] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -407,7 +407,7 @@ export const ChaosControlModal: React.FC = () => {
                             </option>
                           ))
                         ) : (
-                          <option value="R-01">R-01</option>
+                          <option value="R-001">R-001</option>
                         )}
                       </select>
                     ) : selectedFault.startsWith("station") ? (
@@ -416,10 +416,10 @@ export const ChaosControlModal: React.FC = () => {
                         onChange={(e) => setTargetId(e.target.value)}
                         className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-red-500"
                       >
-                        <option value="STATION-01">STATION-01 (Pick 1)</option>
-                        <option value="STATION-02">STATION-02 (Pick 2)</option>
-                        <option value="STATION-03">STATION-03 (Pick 3)</option>
-                        <option value="STATION-04">STATION-04 (Pick 4)</option>
+                        <option value="ST-01">ST-01 (Picking Station 1)</option>
+                        <option value="ST-02">ST-02 (Picking Station 2)</option>
+                        <option value="ST-03">ST-03 (Picking Station 3)</option>
+                        <option value="ST-04">ST-04 (Picking Station 4)</option>
                       </select>
                     ) : (
                       <input

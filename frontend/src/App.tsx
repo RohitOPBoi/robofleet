@@ -1,26 +1,80 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { CanvasMap } from "./components/CanvasMap";
+import { Scene3D } from "./components/Scene3D/Scene3D";
 import { OrderBoard } from "./components/OrderBoard";
 import { AlertDrawer } from "./components/AlertDrawer";
+import { AlertBanner } from "./components/AlertBanner";
 import { EventFeed } from "./components/EventFeed";
 import { SelectedRobotPanel } from "./components/SelectedRobotPanel";
 import { EnvironmentModal } from "./components/EnvironmentModal";
 import { ControlModals } from "./components/ControlModals";
+import { DecisionLogPanel } from "./components/Brain/DecisionLogPanel";
+import { ApprovalsDrawer } from "./components/Brain/ApprovalsDrawer";
+import { SupervisorCommandBar } from "./components/Brain/SupervisorCommandBar";
+import { ChaosControlModal } from "./components/Chaos/ChaosControlModal";
+import { ExceptionsQueueDrawer } from "./components/Chaos/ExceptionsQueueDrawer";
+import { AuditLogViewerModal } from "./components/Chaos/AuditLogViewerModal";
+import { ReplayTimeline } from "./components/ReplayTimeline";
 import { pauseSimulation, resumeSimulation, setSimulationSpeed } from "./services/api";
 import { setStore, useStore, useWebSocketConnection } from "./store/useStore";
+
+const VIEW_MODES: Array<"2d" | "3d" | "split"> = ["2d", "3d", "split"];
 
 export const App: React.FC = () => {
   // Establish persistent WebSocket connection & reactive state
   useWebSocketConnection();
-  const { isPaused, leftPanelOpen, rightPanelOpen, activeRightTab, alerts } = useStore();
+  const store = useStore();
+  const {
+    isPaused,
+    leftPanelOpen,
+    rightPanelOpen,
+    activeRightTab,
+    alerts,
+    viewMode,
+    isSupervisorBarOpen,
+  } = store;
 
   const activeAlertCount = alerts.filter((a) => !a.cleared).length;
+
+  // Draggable Split Divider State
+  const [splitRatio, setSplitRatio] = useState<number>(0.5);
+  const [isDraggingSplit, setIsDraggingSplit] = useState<boolean>(false);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isDraggingSplit) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!mainRef.current) return;
+      const rect = mainRef.current.getBoundingClientRect();
+      const relativeX = e.clientX - rect.left;
+      const newRatio = Math.max(0.2, Math.min(0.8, relativeX / rect.width));
+      setSplitRatio(newRatio);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSplit(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingSplit]);
 
   // Global Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setStore({ isSupervisorBarOpen: !isSupervisorBarOpen });
         return;
       }
 
@@ -46,6 +100,10 @@ export const App: React.FC = () => {
       } else if (e.code === "Digit5") {
         setStore({ speedMultiplier: 5.0 });
         await setSimulationSpeed(5.0);
+      } else if (e.code === "KeyV") {
+        e.preventDefault();
+        const nextMode = VIEW_MODES[(VIEW_MODES.indexOf(viewMode) + 1) % VIEW_MODES.length];
+        setStore({ viewMode: nextMode });
       } else if (e.code === "BracketLeft") {
         setStore({ leftPanelOpen: !leftPanelOpen });
       } else if (e.code === "BracketRight") {
@@ -54,6 +112,12 @@ export const App: React.FC = () => {
         setStore({
           isEnvironmentModalOpen: false,
           isEStopModalOpen: false,
+          isDecisionLogOpen: false,
+          isApprovalsDrawerOpen: false,
+          isSupervisorBarOpen: false,
+          isChaosControlOpen: false,
+          isExceptionsQueueOpen: false,
+          isAuditLogOpen: false,
           selectedRobotId: null,
           selectedOrderId: null,
           blockModeActive: false,
@@ -63,12 +127,15 @@ export const App: React.FC = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPaused, leftPanelOpen, rightPanelOpen]);
+  }, [isPaused, leftPanelOpen, rightPanelOpen, viewMode]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950 text-gray-100 font-sans select-none">
       {/* Top Bar with KPIs & Controls */}
       <TopBar />
+
+      {/* Floating High-Priority Alert Banner */}
+      <AlertBanner />
 
       {/* Main Operations Canvas Area */}
       <div className="flex flex-1 overflow-hidden relative min-h-0">
@@ -79,10 +146,59 @@ export const App: React.FC = () => {
           </aside>
         )}
 
-        {/* Center: 2D Live Operations Canvas */}
-        <main className="flex-1 min-w-0 h-full relative overflow-hidden bg-gray-950">
-          <CanvasMap />
+        {/* Center: Live 2D / 3D / Split Digital Twin Canvas */}
+        <main
+          ref={mainRef}
+          className="flex-1 min-w-0 h-full relative overflow-hidden bg-gray-950 flex"
+        >
+          {viewMode === "2d" && (
+            <div className="w-full h-full relative">
+              <CanvasMap />
+            </div>
+          )}
+
+          {viewMode === "3d" && (
+            <div className="w-full h-full relative">
+              <Scene3D />
+            </div>
+          )}
+
+          {viewMode === "split" && (
+            <div className="flex w-full h-full relative overflow-hidden">
+              <div
+                style={{ width: `${splitRatio * 100}%` }}
+                className="h-full relative overflow-hidden"
+              >
+                <CanvasMap />
+              </div>
+
+              {/* Draggable Divider */}
+              <div
+                onMouseDown={() => setIsDraggingSplit(true)}
+                className={`w-1.5 h-full cursor-col-resize z-20 flex items-center justify-center transition-colors select-none ${
+                  isDraggingSplit
+                    ? "bg-cyan-500 shadow-md shadow-cyan-500/50"
+                    : "bg-gray-800 hover:bg-cyan-600/70"
+                }`}
+                title="Drag to resize 2D/3D split view"
+              >
+                <div className="w-0.5 h-8 bg-gray-500/80 rounded-full" />
+              </div>
+
+              <div
+                style={{ width: `${(1 - splitRatio) * 100}%` }}
+                className="h-full relative overflow-hidden"
+              >
+                <Scene3D />
+              </div>
+            </div>
+          )}
+
+          {/* Persistent Selected AMR Detail Panel */}
           <SelectedRobotPanel />
+
+          {/* Phase 7 Replay & Timeline Scrubber Dock */}
+          <ReplayTimeline />
         </main>
 
         {/* Right Side: Tabbed Alerts & Event Feed (Collapsible) */}
@@ -135,6 +251,16 @@ export const App: React.FC = () => {
       {/* Modals & Dialogs */}
       <EnvironmentModal />
       <ControlModals />
+
+      {/* AI Operations Brain Overlays (Phase 5) */}
+      <DecisionLogPanel />
+      <ApprovalsDrawer />
+      <SupervisorCommandBar />
+
+      {/* Chaos & Resilience Studio Overlays (Phase 6) */}
+      <ChaosControlModal />
+      <ExceptionsQueueDrawer />
+      <AuditLogViewerModal />
     </div>
   );
 };

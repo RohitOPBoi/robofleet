@@ -12,29 +12,29 @@ const uprightGeometry = new THREE.BoxGeometry(0.06, 2.2, 0.06);
 const shelfBeamGeometry = new THREE.BoxGeometry(0.88, 0.04, 0.78);
 const binGeometry = new THREE.BoxGeometry(0.32, 0.22, 0.3);
 
-// Shared materials
+// Shared materials (Light Architectural Racks with Vibrant Pop Bins)
 const ambientRackMat = new THREE.MeshStandardMaterial({
-  color: 0x1e293b,
-  roughness: 0.5,
-  metalness: 0.6,
+  color: 0xe2e8f0, // Clean architectural aluminum off-white
+  roughness: 0.25,
+  metalness: 0.65,
 });
 
 const chilledRackMat = new THREE.MeshStandardMaterial({
-  color: 0x1e3a8a,
-  roughness: 0.4,
+  color: 0x93c5fd, // Light icy blue frame
+  roughness: 0.25,
   metalness: 0.7,
 });
 
 const frozenRackMat = new THREE.MeshStandardMaterial({
-  color: 0x0e7490,
-  roughness: 0.35,
-  metalness: 0.8,
+  color: 0x67e8f9, // Electric frost cyan frame
+  roughness: 0.25,
+  metalness: 0.7,
 });
 
-const blueBinMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.6 });
-const amberBinMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 });
-const emeraldBinMat = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.6 });
-const grayBinMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
+const blueBinMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3, metalness: 0.15 });
+const amberBinMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3, metalness: 0.15 });
+const emeraldBinMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.3, metalness: 0.15 });
+const grayBinMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.3, metalness: 0.15 });
 
 const dummy = new THREE.Object3D();
 
@@ -186,11 +186,13 @@ export const Racks3D: React.FC = () => {
             ref={ambientUprightsRef}
             args={[uprightGeometry, ambientRackMat, ambientRacks.length * 4]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={ambientDecksRef}
             args={[shelfBeamGeometry, ambientRackMat, ambientRacks.length * 3]}
             receiveShadow
+            frustumCulled={false}
           />
         </>
       )}
@@ -202,11 +204,13 @@ export const Racks3D: React.FC = () => {
             ref={chilledUprightsRef}
             args={[uprightGeometry, chilledRackMat, chilledRacks.length * 4]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={chilledDecksRef}
             args={[shelfBeamGeometry, chilledRackMat, chilledRacks.length * 3]}
             receiveShadow
+            frustumCulled={false}
           />
         </>
       )}
@@ -218,11 +222,13 @@ export const Racks3D: React.FC = () => {
             ref={frozenUprightsRef}
             args={[uprightGeometry, frozenRackMat, frozenRacks.length * 4]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={frozenDecksRef}
             args={[shelfBeamGeometry, frozenRackMat, frozenRacks.length * 3]}
             receiveShadow
+            frustumCulled={false}
           />
         </>
       )}
@@ -234,21 +240,25 @@ export const Racks3D: React.FC = () => {
             ref={blueBinsRef}
             args={[binGeometry, blueBinMat, allRacks.length * 2]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={amberBinsRef}
             args={[binGeometry, amberBinMat, allRacks.length]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={emeraldBinsRef}
             args={[binGeometry, emeraldBinMat, allRacks.length]}
             castShadow
+            frustumCulled={false}
           />
           <instancedMesh
             ref={grayBinsRef}
             args={[binGeometry, grayBinMat, allRacks.length]}
             castShadow
+            frustumCulled={false}
           />
         </>
       )}

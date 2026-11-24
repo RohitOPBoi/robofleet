@@ -60,3 +60,12 @@ class Registry(Generic[T]):
 
     def list_registered(self) -> list[str]:
         return sorted(self._factories.keys())
+
+
+# Declared seam registry instances
+planner_registry: Registry[Any] = Registry("MovementPlanner")
+dispatcher_registry: Registry[Any] = Registry("TaskDispatcher")
+strategy_registry: Registry[Any] = Registry("FulfilmentStrategy")
+metric_provider_registry: Registry[Any] = Registry("MetricProvider")
+catalogue_source_registry: Registry[Any] = Registry("CatalogueSource")
+order_source_registry: Registry[Any] = Registry("OrderSource")

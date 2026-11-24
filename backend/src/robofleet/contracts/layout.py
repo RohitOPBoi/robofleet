@@ -69,6 +69,7 @@ class Station(RoboFleetBaseModel):
     queue_cells: list[Coordinate] = Field(default_factory=list)
     worker_count: int = 1
     worker_kind: str = "simulated_human"
+    is_active: bool = True
 
 
 class Charger(RoboFleetBaseModel):

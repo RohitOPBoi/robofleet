@@ -50,6 +50,12 @@ class BatchGreedyStrategy:
         charger_cells = [c.pos for c in layout.chargers]
         charger_tuples = {c.as_tuple() for c in charger_cells}
         stations = layout.stations or []
+        parking_cells = layout.parking_cells or [Coordinate(x=1, y=1)]
+        sorted_all_robots = sorted(robots, key=lambda r: r.robot_id)
+
+        def get_home_slot(robot_id: str) -> Coordinate:
+            idx = next((i for i, r in enumerate(sorted_all_robots) if r.robot_id == robot_id), 0)
+            return parking_cells[idx % len(parking_cells)]
 
         # 1. Proactive Charge Management
         for r in robots:
@@ -120,7 +126,7 @@ class BatchGreedyStrategy:
                         r.carrying = []
                         r.state = RobotState.IDLE
                         station_mgr.remove_robot(task.station_id or "", r.robot_id)
-                        destinations[r.robot_id] = r.cell
+                        destinations[r.robot_id] = get_home_slot(r.robot_id)
                     else:
                         destinations[r.robot_id] = access if access else r.cell
                 continue
@@ -215,8 +221,16 @@ class BatchGreedyStrategy:
                 safe_idle_robots.remove(best_robot)
                 destinations[best_robot.robot_id] = access_cell
 
-        for r in robots:
-            if r.robot_id not in destinations:
+        parking_cells = layout.parking_cells or []
+        sorted_all_robots = sorted(robots, key=lambda r: r.robot_id)
+        for i, r in enumerate(sorted_all_robots):
+            if r.state in (RobotState.UNAVAILABLE, RobotState.CHARGING) or r.fault is not None:
                 destinations[r.robot_id] = r.cell
+                continue
+            if r.robot_id not in destinations:
+                if parking_cells:
+                    destinations[r.robot_id] = parking_cells[i % len(parking_cells)]
+                else:
+                    destinations[r.robot_id] = r.cell
 
         return destinations

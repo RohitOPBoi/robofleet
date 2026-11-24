@@ -5,10 +5,12 @@ and strict order tote consolidation without mixing.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 import numpy as np
 
+from robofleet.config.models import PickVerificationConfig
 from robofleet.contracts.catalogue import Sku
+from robofleet.contracts.chaos import PickOutcome
 from robofleet.contracts.common import Coordinate
 from robofleet.contracts.layout import Station as StationDef
 from robofleet.contracts.order import Order, OrderLine, OrderStatus
@@ -29,6 +31,7 @@ class ActivePickOperation:
         quantity: int,
         duration_ticks: int,
         start_tick: int,
+        sku: Sku | None = None,
     ) -> None:
         self.order_id = order_id
         self.sku_id = sku_id
@@ -36,6 +39,11 @@ class ActivePickOperation:
         self.duration_ticks = max(1, duration_ticks)
         self.start_tick = start_tick
         self.elapsed_ticks = 0
+        self.sku = sku
+        self.retries: int = 0
+        self.verification_state: PickOutcome = PickOutcome.COMMANDED
+        self.confidence: float = 1.0
+        self.failure_reason: str | None = None
 
     @property
     def is_finished(self) -> bool:
@@ -51,8 +59,28 @@ class PickingStationManager:
         base_pick_time_ticks: int = 30,
         consolidation_time_ticks: int = 20,
         max_queue_capacity: int = 6,
+        verification_cfg: PickVerificationConfig | None = None,
+        picker_rng: np.random.Generator | None = None,
+        event_emitter: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         self.station_defs = {s.station_id: s for s in station_defs}
+        self.base_pick_time_ticks = base_pick_time_ticks
+        self.consolidation_time_ticks = consolidation_time_ticks
+        self.max_queue_capacity = max_queue_capacity
+        self.verification_cfg = verification_cfg or PickVerificationConfig()
+        self.picker_rng = picker_rng
+        self.event_emitter = event_emitter
+
+        # Verification metrics & telemetry
+        self.last_failed_picks: list[tuple[str, str, int, str, PickOutcome]] = []
+        self.verified_picks_count: int = 0
+        self.failed_picks_count: int = 0
+        self.retried_picks_count: int = 0
+
+        # Per-station dynamic tracking
+        self.dock_occupant: dict[str, str | None] = {s.station_id: None for s in station_defs}
+        self.robot_queues: dict[str, list[str]] = {s.station_id: [] for s in station_defs}
+        self.active_picks: dict[str, list[ActivePickOperation]] = {s.station_id: [] for s in station_defs}
         self.base_pick_time_ticks = base_pick_time_ticks
         self.consolidation_time_ticks = consolidation_time_ticks
         self.max_queue_capacity = max_queue_capacity
@@ -111,20 +139,26 @@ class PickingStationManager:
             return Coordinate(x=0, y=0)
 
         queue = self.robot_queues.get(station_id, [])
+        q_cells = self.get_queue_cells(station_id)
+        queue_entry = q_cells[0] if q_cells else Coordinate(x=max(1, dock.x - 1), y=max(1, dock.y - 1))
+
         if robot_id not in queue:
-            # Not yet queued; head towards queue entrance (tail cell)
-            q_cells = self.get_queue_cells(station_id)
-            return q_cells[-1] if q_cells else dock
+            # Not yet queued; head towards queue entrance slot
+            return queue_entry
 
         index = queue.index(robot_id)
         if index == 0:
-            # Head of queue goes to dock cell
-            return dock
+            # Head of queue can only enter dock if dock is vacant or already held by this robot
+            occupant = self.dock_occupant.get(station_id)
+            if occupant is None or occupant == robot_id:
+                return dock
+            # Dock is occupied by another robot; wait in queue entry slot so dock exit remains clear
+            return queue_entry
 
-        q_cells = self.get_queue_cells(station_id)
-        if index - 1 < len(q_cells):
-            return q_cells[index - 1]
-        return q_cells[-1] if q_cells else dock
+        # Subsequent robots queue along approach lane (index 1 -> q_cells[1], index 2 -> q_cells[2] etc.)
+        if index < len(q_cells):
+            return q_cells[index]
+        return Coordinate(x=max(1, dock.x - 1), y=max(1, dock.y - 1 - index))
 
     def start_pick(
         self,
@@ -134,7 +168,7 @@ class PickingStationManager:
         sku: Sku | None,
         current_tick: int,
     ) -> ActivePickOperation:
-        """Schedules pick operation at station with item difficulty multiplier."""
+        """Schedules pick operation at station with item difficulty multiplier and verification model."""
         difficulty = sku.handling_difficulty if sku else 1.0
         # Service time = base * difficulty * quantity
         duration = int(round(self.base_pick_time_ticks * difficulty * max(1, line.quantity)))
@@ -145,8 +179,20 @@ class PickingStationManager:
             quantity=line.quantity,
             duration_ticks=duration,
             start_tick=current_tick,
+            sku=sku,
         )
         self.active_picks[station_id].append(op)
+
+        if self.event_emitter:
+            self.event_emitter(
+                "pick.commanded",
+                {
+                    "order_id": order.order_id,
+                    "sku_id": line.sku_id,
+                    "quantity": line.quantity,
+                    "station_id": station_id,
+                },
+            )
         return op
 
     def step_picks(
@@ -154,9 +200,13 @@ class PickingStationManager:
         current_tick: int,
         orders_by_id: dict[str, Order],
     ) -> list[tuple[str, str, int]]:
-        """Advances active picks. Returns list of completed (order_id, sku_id, quantity)."""
+        """Advances active picks and applies pick verification (Phase 6).
+        Returns list of verified completed (order_id, sku_id, quantity).
+        Populates self.last_failed_picks with items failing verification.
+        """
         self.total_ticks += 1
         completed: list[tuple[str, str, int]] = []
+        self.last_failed_picks = []
 
         for st_id, picks in self.active_picks.items():
             if picks:
@@ -165,16 +215,142 @@ class PickingStationManager:
                 active_op.elapsed_ticks += 1
 
                 if active_op.is_finished:
-                    completed.append((active_op.order_id, active_op.sku_id, active_op.quantity))
-                    picks.pop(0)
+                    # Execute Pick Verification (SO-101 Pattern)
+                    if self.verification_cfg.enabled:
+                        sku = active_op.sku
+                        h_diff = sku.handling_difficulty if sku else 1.0
+                        fragility = getattr(sku, "fragility", 0.0) if sku else 0.0
 
-                    # Update consolidation buffer
-                    ord_id = active_op.order_id
-                    if ord_id not in self.order_consolidation:
-                        self.order_consolidation[ord_id] = {}
-                    self.order_consolidation[ord_id][active_op.sku_id] = (
-                        self.order_consolidation[ord_id].get(active_op.sku_id, 0) + active_op.quantity
-                    )
+                        # Sample confidence from normal distribution
+                        if self.picker_rng:
+                            confidence = float(np.clip(self.picker_rng.normal(0.96, 0.04), 0.50, 1.0))
+                            u = float(self.picker_rng.uniform(0.0, 1.0))
+                        else:
+                            confidence = 0.98
+                            u = 0.5
+
+                        # Evaluate probabilistic failure modes
+                        p_damaged = self.verification_cfg.damaged_item_rate * (1.0 + fragility * 2.0)
+                        p_wrong = self.verification_cfg.wrong_item_rate
+                        p_qty = self.verification_cfg.quantity_mismatch_rate
+                        p_grasp = self.verification_cfg.grasp_failure_rate * h_diff
+
+                        fail_reason: str | None = None
+                        outcome: PickOutcome = PickOutcome.VERIFIED
+
+                        if u < p_damaged:
+                            fail_reason = "damaged_item"
+                            outcome = PickOutcome.MISMATCH
+                        elif u < p_damaged + p_wrong:
+                            fail_reason = "wrong_item"
+                            outcome = PickOutcome.MISMATCH
+                        elif u < p_damaged + p_wrong + p_qty:
+                            fail_reason = "quantity_mismatch"
+                            outcome = PickOutcome.MISMATCH
+                        elif u < p_damaged + p_wrong + p_qty + p_grasp:
+                            fail_reason = "failed_grasp"
+                            outcome = PickOutcome.UNVERIFIED
+                        elif confidence < self.verification_cfg.confidence_threshold:
+                            fail_reason = "uncertain_identification"
+                            outcome = PickOutcome.UNVERIFIED
+
+                        if outcome == PickOutcome.VERIFIED:
+                            active_op.verification_state = PickOutcome.VERIFIED
+                            active_op.confidence = confidence
+                            self.verified_picks_count += 1
+
+                            if self.event_emitter:
+                                self.event_emitter(
+                                    "pick.verified",
+                                    {
+                                        "order_id": active_op.order_id,
+                                        "sku_id": active_op.sku_id,
+                                        "quantity": active_op.quantity,
+                                        "confidence": round(confidence, 3),
+                                        "station_id": st_id,
+                                    },
+                                )
+
+                            completed.append((active_op.order_id, active_op.sku_id, active_op.quantity))
+                            picks.pop(0)
+
+                            # Update consolidation buffer
+                            ord_id = active_op.order_id
+                            if ord_id not in self.order_consolidation:
+                                self.order_consolidation[ord_id] = {}
+                            self.order_consolidation[ord_id][active_op.sku_id] = (
+                                self.order_consolidation[ord_id].get(active_op.sku_id, 0) + active_op.quantity
+                            )
+
+                        else:
+                            # Verification failure: MISMATCH or UNVERIFIED
+                            active_op.verification_state = outcome
+                            active_op.confidence = min(confidence, 0.72)
+                            active_op.failure_reason = fail_reason
+
+                            if self.event_emitter:
+                                ev_type = "pick.mismatch" if outcome == PickOutcome.MISMATCH else "pick.unverified"
+                                self.event_emitter(
+                                    ev_type,
+                                    {
+                                        "order_id": active_op.order_id,
+                                        "sku_id": active_op.sku_id,
+                                        "reason": fail_reason,
+                                        "confidence": round(active_op.confidence, 3),
+                                        "station_id": st_id,
+                                    },
+                                )
+
+                            # Policy: Retry once (configurable)
+                            if active_op.retries < self.verification_cfg.retry_limit:
+                                active_op.retries += 1
+                                self.retried_picks_count += 1
+                                active_op.elapsed_ticks = 0
+                                active_op.duration_ticks = 15  # Re-scan / re-grasp duration in ticks
+                                active_op.verification_state = PickOutcome.COMMANDED
+
+                                if self.event_emitter:
+                                    self.event_emitter(
+                                        "pick.retried",
+                                        {
+                                            "order_id": active_op.order_id,
+                                            "sku_id": active_op.sku_id,
+                                            "retry_count": active_op.retries,
+                                            "reason": fail_reason,
+                                            "station_id": st_id,
+                                        },
+                                    )
+                            else:
+                                # Retries exhausted: isolate item and raise exception
+                                self.failed_picks_count += 1
+                                if self.event_emitter:
+                                    self.event_emitter(
+                                        "pick.failed",
+                                        {
+                                            "order_id": active_op.order_id,
+                                            "sku_id": active_op.sku_id,
+                                            "reason": fail_reason,
+                                            "outcome": outcome.value,
+                                            "station_id": st_id,
+                                        },
+                                    )
+
+                                self.last_failed_picks.append(
+                                    (active_op.order_id, active_op.sku_id, active_op.quantity, fail_reason or "unknown", outcome)
+                                )
+                                picks.pop(0)
+
+                    else:
+                        # Verification disabled: passthrough
+                        completed.append((active_op.order_id, active_op.sku_id, active_op.quantity))
+                        picks.pop(0)
+
+                        ord_id = active_op.order_id
+                        if ord_id not in self.order_consolidation:
+                            self.order_consolidation[ord_id] = {}
+                        self.order_consolidation[ord_id][active_op.sku_id] = (
+                            self.order_consolidation[ord_id].get(active_op.sku_id, 0) + active_op.quantity
+                        )
 
         # Step consolidation progress for orders that have all items picked
         for ord_id, order in list(orders_by_id.items()):

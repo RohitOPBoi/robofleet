@@ -20,9 +20,20 @@ class ExceptionsRecoverySpecialist:
     def propose(self, brief: SituationBrief) -> list[DecisionProposal]:
         proposals: list[DecisionProposal] = []
 
-        # 1. Faulted robot escalation
+        # 1. Faulted robot escalation & recovery
         for r in brief.critical_robots:
             if "FAULT" in r.state:
+                # Propose reassigning tasks to prevent order starvation
+                proposals.append(
+                    DecisionProposal(
+                        specialist="exceptions",
+                        action="reassign_task",
+                        command={"command_type": "reassign_task", "robot_id": r.robot_id},
+                        confidence=0.95,
+                        rationale=f"Reassign pending tasks of faulted AMR {r.robot_id} to active fleet pool.",
+                    )
+                )
+
                 cmd = EscalateToHumanCommand(
                     action_description=f"AMR {r.robot_id} has entered FAULTED state; dispatch maintenance",
                     action_command={"command_type": "clear_fault", "target_id": r.robot_id},

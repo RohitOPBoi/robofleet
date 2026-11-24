@@ -89,3 +89,17 @@ def test_schema_compatibility_with_committed_schemas() -> None:
         assert status in ("NONE", "PATCH", "MINOR"), (
             f"Model {model_name} had breaking change: {status}"
         )
+
+
+def test_generated_typescript_types_up_to_date() -> None:
+    from pathlib import Path
+
+    from robofleet.tools.export_types import TYPESCRIPT_HEADER
+
+    ts_file = Path("frontend/src/types/generated.ts")
+    assert ts_file.exists(), "frontend/src/types/generated.ts does not exist! Run 'make types'."
+    current_content = ts_file.read_text(encoding="utf-8")
+    expected_content = TYPESCRIPT_HEADER.strip() + "\n"
+    assert current_content == expected_content, (
+        "frontend/src/types/generated.ts is stale! Run 'make types'."
+    )

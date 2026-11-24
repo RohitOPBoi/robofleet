@@ -72,9 +72,10 @@ class WebSocketClientSession:
 class WebSocketManager:
     """Manages active WebSocket connections and broadcasting."""
 
-    def __init__(self, pacer: SimulationPacer) -> None:
+    def __init__(self, pacer: SimulationPacer, orchestrator: Any = None) -> None:
         self.pacer = pacer
         self.engine = pacer.engine
+        self.orchestrator = orchestrator
         self._clients: dict[str, WebSocketClientSession] = {}
         self._client_tasks: dict[str, asyncio.Task[None]] = {}
         self._lock = asyncio.Lock()
@@ -168,7 +169,13 @@ class WebSocketManager:
 
     async def on_sim_step(self, dynamic_state: DynamicState, recent_events: list[Event]) -> None:
         """Broadcasts delta message to all connected clients."""
-        delta_payload = {
+        recent_decision = None
+        if self.orchestrator and getattr(self.orchestrator, "enabled", False):
+            recent_decision = await self.orchestrator.step(dynamic_state.tick)
+
+        delta_payload: dict[str, Any] = {
+            "sim_time_ms": self.engine.clock.sim_time_ms,
+            "tick": dynamic_state.tick,
             "robots": [r.model_dump() for r in dynamic_state.robots],
             "orders": [o.model_dump() for o in dynamic_state.orders],
             "alerts": [a.model_dump() for a in dynamic_state.alerts],
@@ -176,6 +183,39 @@ class WebSocketManager:
             "kpis": dynamic_state.kpis,
             "events": [e.model_dump() for e in recent_events],
         }
+
+        # Phase 6 Resilience Telemetry
+        if hasattr(self.engine, "chaos_engine"):
+            delta_payload["degraded_modes"] = [
+                m.model_dump() for m in self.engine.chaos_engine.get_active_degraded_modes()
+            ]
+            delta_payload["active_faults_count"] = len(self.engine.chaos_engine.active_faults)
+        if hasattr(self.engine, "exceptions_queue"):
+            delta_payload["pending_exceptions"] = [
+                e.model_dump() for e in self.engine.exceptions_queue.pending_exceptions.values()
+            ]
+            delta_payload["exceptions_count"] = len(self.engine.exceptions_queue.pending_exceptions)
+        if hasattr(self.engine, "reslot_recommender"):
+            delta_payload["reslot_recommendations"] = [
+                r.model_dump() for r in self.engine.reslot_recommender.recommendations
+            ]
+
+        if self.orchestrator:
+            approvals = list(self.orchestrator.governance.approvals_queue.pending.values())
+            delta_payload["brain_status"] = {
+                "ai_mode": "ai" if self.orchestrator.enabled else "baseline",
+                "provider_status": getattr(self.orchestrator, "provider_name", "heuristic"),
+                "decisions_count": len(getattr(self.orchestrator, "decisions", [])),
+                "pending_approvals_count": len(approvals),
+                "total_cost_usd": getattr(
+                    getattr(self.orchestrator, "anthropic_provider", None),
+                    "total_cost_usd",
+                    0.0,
+                ),
+            }
+            delta_payload["pending_approvals"] = [a.model_dump() for a in approvals]
+            if recent_decision:
+                delta_payload["recent_decision"] = recent_decision.model_dump()
 
         async with self._lock:
             for session in list(self._clients.values()):

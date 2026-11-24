@@ -64,7 +64,7 @@ export const Scene3D: React.FC = () => {
   const height = staticWorld?.layout.height ?? 20;
 
   return (
-    <div className="relative flex-1 h-full w-full bg-gray-950 overflow-hidden select-none">
+    <div className="relative flex-1 h-full w-full bg-white overflow-hidden select-none">
       {/* Three.js R3F WebGL Canvas */}
       <Canvas
         shadows="percentage"
@@ -76,10 +76,10 @@ export const Scene3D: React.FC = () => {
         }}
         dpr={[1, 2]}
         onCreated={(state) => {
-          state.gl.setClearColor("#070A10");
+          state.gl.setClearColor("#FFFFFF");
         }}
       >
-        <color attach="background" args={["#070A10"]} />
+        <color attach="background" args={["#FFFFFF"]} />
         <Environment3D />
         <Racks3D />
         <Stations3D />

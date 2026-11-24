@@ -88,3 +88,55 @@ def test_hypothesis_layout_generation_validity(width: int, height: int, rack_row
     else:
         assert layout.width == width
         assert layout.height == height
+
+
+@settings(max_examples=15, deadline=None)
+@given(
+    fault_sequence=st.lists(
+        st.tuples(
+            st.sampled_from(["robot_breakdown", "aisle_blocked", "station_slowdown", "battery_cascade", "bin_missing_stock"]),
+            st.integers(min_value=1, max_value=5),
+            st.integers(min_value=10, max_value=50),
+        ),
+        min_size=3,
+        max_size=12,
+    )
+)
+def test_hypothesis_chaos_fault_sequences_invariants(
+    fault_sequence: list[tuple[str, int, int]],
+) -> None:
+    """Chaos property tests (Hypothesis, Phase 6): invariants hold under random fault sequences."""
+    cfg, _ = load_config(scenario_name="standard")
+    cfg.robot_count = 8
+    layout = generate_parametric_layout(cfg.layout)
+    skus = generate_catalogue(sku_count=60, seed=42)
+    bins, _ = slot_inventory(layout=layout, skus=skus, seed=42)
+    engine = SimEngine(config=cfg, layout=layout, skus=skus, bins=bins)
+
+    initial_total_units = sum(b.quantity for b in bins)
+
+    for fault_type, target_num, duration in fault_sequence:
+        r_id = f"R-{target_num:03d}"
+        target = r_id if "robot" in fault_type else "system"
+        engine.chaos_engine.inject_fault(
+            fault_type=fault_type,
+            target_id=target,
+            duration_ticks=duration,
+            tick=engine.clock.tick,
+        )
+
+        for _ in range(5):
+            engine.step()
+
+            # Invariant 1: SafetyGuard physical invariant (no duplicate robot cells)
+            cells = [r.cell.as_tuple() for r in engine.robots]
+            assert len(cells) == len(set(cells)), f"Safety collision detected: {cells}"
+
+            # Invariant 2: Unit conservation
+            current_units = sum(b.quantity for b in engine.bins) + engine.task_mgr.units_in_flight + engine.task_mgr.units_completed
+            assert current_units == initial_total_units, f"Unit conservation breached: {current_units} != {initial_total_units}"
+
+            # Invariant 3: Zero lost orders
+            lost_orders = sum(1 for o in engine.orders if o.status.value == "FAILED")
+            assert lost_orders == 0, "Zero lost orders invariant failed"
+

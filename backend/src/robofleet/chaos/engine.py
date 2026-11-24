@@ -36,7 +36,7 @@ class ChaosEngine:
         if scenario_path:
             self.load_chaos_scenario(scenario_path)
 
-    def load_chaos_scenario(self, path: str | Path) -> None:
+    def load_chaos_scenario(self, path: str | Path, current_tick: int = 0) -> None:
         p = Path(path)
         if not p.exists():
             logger.warning("[ChaosEngine] Scenario file %s not found", path)
@@ -45,8 +45,31 @@ class ChaosEngine:
         with open(p, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 
-        self.scheduled_faults = data.get("scheduled_faults", [])
-        logger.info("[ChaosEngine] Loaded %d scheduled faults from %s", len(self.scheduled_faults), path)
+        raw_faults = data.get("scheduled_faults", [])
+        self.scheduled_faults = []
+        for sf in raw_faults:
+            item = dict(sf)
+            if current_tick > 0:
+                item["tick"] = current_tick + sf.get("tick", 0)
+            self.scheduled_faults.append(item)
+
+        # Immediately trigger the first fault when loaded interactively
+        if self.scheduled_faults and current_tick > 0:
+            first = self.scheduled_faults.pop(0)
+            self.inject_fault(
+                fault_type=first["fault_type"],
+                target_id=first.get("target_id", "system"),
+                duration_ticks=first.get("duration_ticks", 200),
+                severity=first.get("severity"),
+                params=first.get("params", {}),
+                tick=current_tick,
+            )
+
+        logger.info(
+            "[ChaosEngine] Loaded scheduled faults from %s (offset=%d)",
+            path,
+            current_tick,
+        )
 
     def inject_fault(
         self,

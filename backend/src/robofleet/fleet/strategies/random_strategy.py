@@ -184,8 +184,13 @@ class RandomStrategy:
                 task_mgr.assign_task_to_robot(task, chosen_robot, current_tick, order=order)
                 destinations[chosen_robot.robot_id] = access_cell
 
-        for r in robots:
+        parking_cells = layout.parking_cells or []
+        sorted_all_robots = sorted(robots, key=lambda r: r.robot_id)
+        for i, r in enumerate(sorted_all_robots):
             if r.robot_id not in destinations:
-                destinations[r.robot_id] = r.cell
+                if parking_cells:
+                    destinations[r.robot_id] = parking_cells[i % len(parking_cells)]
+                else:
+                    destinations[r.robot_id] = r.cell
 
         return destinations

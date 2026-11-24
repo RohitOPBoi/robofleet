@@ -83,7 +83,7 @@ def test_safety_guard_independent_verification_over_500_ticks() -> None:
 
 
 def test_emergency_stop_halts_and_holds_until_resume() -> None:
-    cfg, _ = load_config(scenario_name="standard")
+    cfg, _ = load_config(scenario_name="standard", cli_overrides=["dispatcher.type=wander"])
     layout = generate_parametric_layout(cfg.layout)
     skus = generate_catalogue(sku_count=200, seed=42)
     bins, _ = slot_inventory(layout=layout, skus=skus, seed=42)
