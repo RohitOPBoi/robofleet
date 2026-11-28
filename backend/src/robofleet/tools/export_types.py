@@ -336,12 +336,18 @@ export interface BlockCellsControlRequest {
   cells: Coordinate[];
 }
 
-// AI Operations Brain Types (Phase 5)
-export type BrainMode = "baseline" | "ai";
-export type BrainProvider = "heuristic" | "anthropic" | "replay";
+// AI Operations Brain Types (Phase 5 & Universal AI Upgrade)
+export type BrainMode = "baseline" | "heuristic" | "ai" | "local_llm" | "replay";
+export type BrainProvider =
+  | "heuristic"
+  | "ai"
+  | "local_llm"
+  | "replay"
+  | "heuristic_fallback"
+  | "anthropic";
 
 export interface DecisionProposal {
-  specialist: "planner" | "traffic" | "exceptions" | "explainer" | "human";
+  specialist: "planner" | "traffic" | "exceptions" | "explainer" | "human" | "orchestrator";
   action: string;
   command: Record<string, any>;
   confidence: number;
@@ -355,14 +361,85 @@ export interface Decision {
   brief_hash: string;
   proposals: DecisionProposal[];
   final_commands: Record<string, any>[];
+  rejected_commands?: Record<string, any>[];
   governance_outcome: "approved" | "require_human" | "denied";
   execution_result: "success" | "partial" | "failed" | "rejected_by_safety";
   observed_outcome: "improved" | "neutral" | "worsened" | "unknown";
   latency_ms: number;
   token_usage: Record<string, number>;
   cost_usd: number;
+  operating_mode?: "heuristic" | "ai" | "local_llm" | "replay";
   provider_mode: BrainProvider;
+  provider_name?: string;
+  model_name?: string;
+  fallback_used?: boolean;
+  fallback_reason?: string;
+  attribution?: string;
+  situation_summary?: string;
+  traffic_plan?: Record<string, any>;
+  unresolved_risks?: string[];
+  confidence?: number;
+  outcome_metrics?: Record<string, any>;
+  decision_version?: number;
   rationale: string;
+}
+
+export interface ProviderPresetInfo {
+  id: string;
+  provider_type: string;
+  label: string;
+  api_compatibility: "openai_chat" | "openai_responses" | "anthropic_messages";
+  default_base_url: string;
+  default_model: string;
+  suggested_models: string[];
+  env_vars: string[];
+  notes?: string;
+}
+
+export interface AICloudConfigSummary {
+  provider_type: string;
+  provider_label: string;
+  api_compatibility: "openai_chat" | "openai_responses" | "anthropic_messages";
+  base_url: string;
+  model: string;
+  timeout_s: number;
+  max_tokens: number;
+  temperature: number;
+  fallback_policy: "heuristic" | "safe_wait";
+  has_api_key: boolean;
+  masked_api_key: string;
+  key_source: string;
+}
+
+export interface LocalLLMConfigSummary {
+  provider: string;
+  base_url: string;
+  model: string;
+  recommended_model: string;
+  timeout_s: number;
+  context_length: number;
+  temperature: number;
+  max_tokens: number;
+  max_concurrency: number;
+  fallback_policy: "heuristic" | "safe_wait";
+  health?: {
+    ok: boolean;
+    status: string;
+    provider: string;
+    model: string;
+    message: string;
+    latency_ms: number;
+    available_models: string[];
+  } | null;
+}
+
+export interface BrainConfigPayload {
+  enabled: boolean;
+  mode: BrainMode;
+  operating_mode: "heuristic" | "ai" | "local_llm" | "replay";
+  ai_cloud: AICloudConfigSummary;
+  local_llm: LocalLLMConfigSummary;
+  presets: ProviderPresetInfo[];
 }
 
 export interface ApprovalRequest {

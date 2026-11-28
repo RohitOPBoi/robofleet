@@ -59,12 +59,36 @@ def check_sample_integration_data() -> tuple[bool, str]:
 
 def check_api_key_status(require_key: bool = False) -> tuple[bool, str]:
     import os
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    if has_key:
-        return True, "ANTHROPIC_API_KEY configured (Live Claude Brain enabled)"
+    from urllib import request
+
+    key_vars = (
+        "ROBOFLEET_AI_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GROQ_API_KEY",
+        "TOGETHER_API_KEY",
+        "FIREWORKS_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "ANTHROPIC_API_KEY",
+    )
+    active_vars = [name for name in key_vars if os.environ.get(name)]
+    ollama_url = os.environ.get("ROBOFLEET_BRAIN__LOCAL__BASE_URL", "http://localhost:11434").rstrip("/")
+    ollama_ok = False
+    try:
+        with request.urlopen(f"{ollama_url}/api/tags", timeout=1.0) as resp:
+            ollama_ok = resp.status == 200
+    except Exception:
+        ollama_ok = False
+
+    if active_vars and ollama_ok:
+        return True, f"Cloud AI ({', '.join(active_vars)}) & Local Ollama ready"
+    if active_vars:
+        return True, f"Cloud AI key set via {', '.join(active_vars)} (Local Ollama offline)"
+    if ollama_ok:
+        return True, f"Local Ollama online at {ollama_url} (Recommended model: qwen3.5:4b)"
     if require_key:
-        return False, "ANTHROPIC_API_KEY missing (Enforced requirement failed)"
-    return True, "ANTHROPIC_API_KEY unset (Safe offline fallback: heuristic & replay active)"
+        return False, "No Cloud AI API key set and Local Ollama unreachable"
+    return True, "No Cloud AI key or Local Ollama detected (Heuristic & Replay modes active)"
 
 
 def run_preflight(require_key: bool = False, test_port: int | None = None) -> bool:

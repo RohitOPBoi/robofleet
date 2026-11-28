@@ -1,5 +1,6 @@
 """Replay Provider (Phase 5 - CA-6).
 Replays recorded decision sequences from an .ndjson file for bit-for-bit determinism in CI/CD.
+Explicitly marks provider attribution when falling back to heuristics after replay completion.
 """
 
 from __future__ import annotations
@@ -7,7 +8,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from robofleet.brain.providers.base import LLMProviderResult
+
+from robofleet.brain.providers.base import LLMProviderResult, build_explicit_fallback_result
 from robofleet.brain.providers.heuristic import HeuristicProvider
 from robofleet.contracts.brain import DecisionProposal, SituationBrief
 
@@ -48,10 +50,25 @@ class ReplayProvider:
                 proposals=proposals,
                 commands=rec.get("final_commands", []),
                 rationale=rec.get("rationale", "Replayed decision"),
+                situation_summary=rec.get("situation_summary", "Replayed recorded decision"),
                 token_usage=rec.get("token_usage", {}),
                 cost_usd=rec.get("cost_usd", 0.0),
                 latency_ms=rec.get("latency_ms", 1.0),
-                provider_name="replay",
+                operating_mode="replay",
+                provider_name="Replay",
+                model_name=str(rec.get("model_name", "recorded")),
+                fallback_used=False,
+                provider_status="connected",
+                attribution="Replay Mode — recorded decision playback",
             )
-        # Fall back to heuristic if replay file exhausted
-        return await self.fallback.decide(brief, specialists)
+
+        reason = "No recorded decisions remaining in replay tape"
+        return await build_explicit_fallback_result(
+            heuristic_fallback=self.fallback,
+            brief=brief,
+            specialists=specialists,
+            operating_mode="replay",
+            fallback_policy="heuristic",
+            reason=reason,
+            model_name="recorded",
+        )

@@ -170,8 +170,14 @@ class WebSocketManager:
     async def on_sim_step(self, dynamic_state: DynamicState, recent_events: list[Event]) -> None:
         """Broadcasts delta message to all connected clients."""
         recent_decision = None
-        if self.orchestrator and getattr(self.orchestrator, "enabled", False):
-            recent_decision = await self.orchestrator.step(dynamic_state.tick)
+        decision_updates: list[dict[str, Any]] = []
+        if self.orchestrator:
+            if hasattr(self.orchestrator, "step_nonblocking"):
+                recent_decision = await self.orchestrator.step_nonblocking(dynamic_state.tick)
+                if hasattr(self.orchestrator, "pop_updated_decisions"):
+                    decision_updates = [d.model_dump() for d in self.orchestrator.pop_updated_decisions()]
+            elif getattr(self.orchestrator, "enabled", False):
+                recent_decision = await self.orchestrator.step(dynamic_state.tick)
 
         delta_payload: dict[str, Any] = {
             "sim_time_ms": self.engine.clock.sim_time_ms,
@@ -202,20 +208,31 @@ class WebSocketManager:
 
         if self.orchestrator:
             approvals = list(self.orchestrator.governance.approvals_queue.pending.values())
-            delta_payload["brain_status"] = {
-                "ai_mode": "ai" if self.orchestrator.enabled else "baseline",
-                "provider_status": getattr(self.orchestrator, "provider_name", "heuristic"),
-                "decisions_count": len(getattr(self.orchestrator, "decisions", [])),
-                "pending_approvals_count": len(approvals),
-                "total_cost_usd": getattr(
-                    getattr(self.orchestrator, "anthropic_provider", None),
-                    "total_cost_usd",
-                    0.0,
-                ),
-            }
+            if hasattr(self.orchestrator, "get_status_summary"):
+                status_summary = self.orchestrator.get_status_summary()
+                delta_payload["brain_status"] = {
+                    **status_summary,
+                    "ai_mode": status_summary.get("mode", "baseline"),
+                    "provider_status": status_summary.get("provider", "heuristic"),
+                    "pending_approvals_count": len(approvals),
+                }
+            else:
+                delta_payload["brain_status"] = {
+                    "ai_mode": "ai" if self.orchestrator.enabled else "baseline",
+                    "provider_status": getattr(self.orchestrator, "provider_name", "heuristic"),
+                    "decisions_count": len(getattr(self.orchestrator, "decisions", [])),
+                    "pending_approvals_count": len(approvals),
+                    "total_cost_usd": getattr(
+                        getattr(self.orchestrator, "anthropic_provider", None),
+                        "total_cost_usd",
+                        0.0,
+                    ),
+                }
             delta_payload["pending_approvals"] = [a.model_dump() for a in approvals]
             if recent_decision:
                 delta_payload["recent_decision"] = recent_decision.model_dump()
+            if decision_updates:
+                delta_payload["decision_updates"] = decision_updates
 
         async with self._lock:
             for session in list(self._clients.values()):

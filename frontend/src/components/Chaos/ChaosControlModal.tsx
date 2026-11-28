@@ -5,14 +5,10 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  Clock,
-  Download,
   Flame,
   Play,
   RotateCcw,
   ShieldAlert,
-  Sparkles,
-  Wrench,
   X,
   Zap,
   ZapOff,
@@ -26,7 +22,7 @@ import {
   loadChaosScenario,
 } from "../../services/api";
 import { setStore, useStore } from "../../store/useStore";
-import type { ChaosFault, DegradedMode, FaultType } from "../../types/generated";
+import type { FaultType } from "../../types/generated";
 
 const FAULT_DEFINITIONS: {
   type: FaultType;
@@ -107,6 +103,11 @@ const FAULT_DEFINITIONS: {
   },
 ];
 
+const formatRobotState = (state: string): string => {
+  const cleaned = state.replace(/_/g, " ").toLowerCase();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+};
+
 export const ChaosControlModal: React.FC = () => {
   const store = useStore();
   const { isChaosControlOpen, activeFaults, degradedModes, robots, kpis } = store;
@@ -119,6 +120,18 @@ export const ChaosControlModal: React.FC = () => {
   const [scenariosList, setScenariosList] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<string>("robot_failure_cascade");
   const [activeTab, setActiveTab] = useState<"inject" | "scenarios" | "active">("inject");
+
+  useEffect(() => {
+    if (!isChaosControlOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setStore({ isChaosControlOpen: false });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isChaosControlOpen]);
 
   useEffect(() => {
     if (isChaosControlOpen) {
@@ -144,13 +157,14 @@ export const ChaosControlModal: React.FC = () => {
 
   if (!isChaosControlOpen) return null;
 
+  const handleClose = () => setStore({ isChaosControlOpen: false });
+
   const handleInject = async () => {
     setSubmitting(true);
     setActionNotice(null);
     try {
-      const res = await injectChaosFault(selectedFault, targetId, durationTicks);
+      await injectChaosFault(selectedFault, targetId, durationTicks);
       setActionNotice(`Injected ${selectedFault} on ${targetId} for ${durationTicks} ticks`);
-      // refresh status
       const st = await fetchChaosStatus();
       setStore({
         activeFaults: st.active_faults || [],
@@ -168,7 +182,7 @@ export const ChaosControlModal: React.FC = () => {
     setActionNotice(null);
     try {
       await injectPerfectStorm();
-      setActionNotice("PERFECT STORM unleashed: 5 correlated faults injected simultaneously!");
+      setActionNotice("Perfect storm triggered: 5 correlated faults injected simultaneously");
       const st = await fetchChaosStatus();
       setStore({
         activeFaults: st.active_faults || [],
@@ -216,94 +230,145 @@ export const ChaosControlModal: React.FC = () => {
   const robotIds = Object.keys(robots);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-gray-950 border border-white/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-gray-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#191310]/65 backdrop-blur-md"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chaos-modal-title"
+        className="studio-card-modal studio-enter relative w-full max-w-4xl max-h-[90vh] rounded-[20px] border border-[var(--studio-border-strong)] flex flex-col overflow-hidden"
+        style={{
+          background: "var(--studio-surface-elevated)",
+          boxShadow: "var(--studio-shadow-hover)",
+        }}
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-red-950/40 via-purple-950/30 to-gray-950">
+        <div
+          className="px-6 py-4 border-b flex items-center justify-between bg-studio-terracotta/[0.06]"
+          style={{ borderColor: "var(--studio-border)" }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shadow-lg shadow-red-500/20">
-              <ZapOff className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-studio-terracotta/15 border border-studio-terracotta/30 flex items-center justify-center text-[#A53420] dark:text-studio-coral">
+              <ZapOff className="w-5 h-5" strokeWidth={1.5} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight">Chaos Engineering Studio</h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-500/20 text-red-300 border border-red-500/30">
-                  PHASE 6 RESILIENCE
-                </span>
-              </div>
-              <p className="text-xs text-gray-400">
+              <h2
+                id="chaos-modal-title"
+                className="text-lg font-semibold tracking-tight"
+                style={{ color: "var(--studio-text-primary)" }}
+              >
+                Chaos Engineering Studio
+              </h2>
+              <p className="text-xs" style={{ color: "var(--studio-text-muted)" }}>
                 Stress-test physical safety bounds, failure cascades, and algorithmic self-healing
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setStore({ isChaosControlOpen: false })}
-            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
+            aria-label="Close Chaos Engineering Studio"
+            onClick={handleClose}
+            className="studio-btn p-2 rounded-xl text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
         </div>
 
         {/* Telemetry Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 px-6 py-3 bg-gray-900/60 border-b border-white/5 font-mono text-xs">
+        <div
+          className="grid grid-cols-2 sm:grid-cols-5 gap-2 px-6 py-3 border-b font-mono text-xs tabular-nums"
+          style={{
+            background: "var(--studio-surface-subtle)",
+            borderColor: "var(--studio-border)",
+          }}
+        >
           <div className="flex flex-col">
-            <span className="text-gray-400 text-[10px]">ACTIVE FAULTS</span>
-            <span className={`text-sm font-bold ${activeFaults.length > 0 ? "text-red-400 animate-pulse" : "text-emerald-400"}`}>
+            <span className="text-[10.5px]" style={{ color: "var(--studio-text-muted)" }}>
+              Active faults
+            </span>
+            <span
+              className={`text-sm font-semibold ${
+                activeFaults.length > 0
+                  ? "text-[#9E2418] dark:text-red-400"
+                  : "text-[#1D6144] dark:text-emerald-300"
+              }`}
+            >
               {activeFaults.length}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-400 text-[10px]">MTTD (MEAN TIME TO DETECT)</span>
-            <span className="text-sm font-bold text-cyan-400">
+            <span className="text-[10.5px]" style={{ color: "var(--studio-text-muted)" }}>
+              MTTD (Mean time to detect)
+            </span>
+            <span className="text-sm font-semibold" style={{ color: "var(--studio-text-primary)" }}>
               {kpis.mttd_seconds ? `${kpis.mttd_seconds.toFixed(1)}s` : "< 1.5s"}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-400 text-[10px]">MTTR (MEAN TIME TO RECOVER)</span>
-            <span className="text-sm font-bold text-amber-400">
+            <span className="text-[10.5px]" style={{ color: "var(--studio-text-muted)" }}>
+              MTTR (Mean time to recover)
+            </span>
+            <span className="text-sm font-semibold text-[#8F4F0D] dark:text-amber-300">
               {kpis.mttr_seconds ? `${kpis.mttr_seconds.toFixed(1)}s` : "14.2s"}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-400 text-[10px]">HUMAN INTERVENTIONS</span>
-            <span className="text-sm font-bold text-indigo-400">
+            <span className="text-[10.5px]" style={{ color: "var(--studio-text-muted)" }}>
+              Human interventions
+            </span>
+            <span className="text-sm font-semibold text-[#A53420] dark:text-studio-coral">
               {kpis.human_interventions_per_100_orders ?? 0} / 100 ord
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-400 text-[10px]">LOST ORDERS GUARANTEE</span>
-            <span className="text-sm font-bold text-emerald-400 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> 0 LOST
+            <span className="text-[10.5px]" style={{ color: "var(--studio-text-muted)" }}>
+              Lost orders
+            </span>
+            <span className="text-sm font-semibold text-[#1D6144] dark:text-emerald-300 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.5} /> 0 lost
             </span>
           </div>
         </div>
 
         {/* Action Notice Banner */}
         {actionNotice && (
-          <div className="px-6 py-2.5 bg-cyan-950/40 border-b border-cyan-800/40 text-cyan-300 text-xs flex items-center justify-between">
+          <div
+            className={`px-6 py-2.5 border-b text-xs flex items-center justify-between ${
+              actionNotice.startsWith("Failed:")
+                ? "bg-red-600/12 border-red-700/25 text-[#9E2418] dark:text-red-300"
+                : "bg-studio-sage/12 border-studio-sage/25 text-[#1D6144] dark:text-emerald-300"
+            }`}
+          >
             <span className="flex items-center gap-1.5 font-medium">
-              <Activity className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+              <Activity className="w-3.5 h-3.5" strokeWidth={1.5} />
               {actionNotice}
             </span>
             <button
               type="button"
               onClick={() => setActionNotice(null)}
-              className="text-cyan-400 hover:text-white"
+              aria-label="Dismiss notice"
+              className="studio-btn p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" strokeWidth={1.5} />
             </button>
           </div>
         )}
 
         {/* Degraded Modes Alert */}
         {degradedModes.length > 0 && (
-          <div className="px-6 py-2 bg-amber-950/50 border-b border-amber-800/40 text-amber-300 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="font-semibold">DEGRADED OPERATIONAL MODES ACTIVE:</span>
+          <div className="px-6 py-2 bg-studio-amber/12 border-b border-studio-amber/25 text-[#8F4F0D] dark:text-amber-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+            <span className="font-semibold">Degraded operational modes active:</span>
             <div className="flex flex-wrap gap-1.5">
               {degradedModes.map((dm) => (
-                <span key={dm.id} className="px-2 py-0.5 rounded bg-amber-900/60 border border-amber-700/60 font-mono text-[11px]">
+                <span
+                  key={dm.id}
+                  className="px-2 py-0.5 rounded-lg bg-studio-amber/15 border border-studio-amber/30 font-mono text-[11px]"
+                >
                   {dm.name}: {dm.reason}
                 </span>
               ))}
@@ -312,39 +377,45 @@ export const ChaosControlModal: React.FC = () => {
         )}
 
         {/* Sub-tabs */}
-        <div className="flex items-center gap-2 px-6 pt-3 border-b border-white/5 bg-gray-900/40 text-xs">
+        <div
+          className="flex items-center gap-4 px-6 pt-3 border-b text-xs"
+          style={{
+            borderColor: "var(--studio-border)",
+            background: "var(--studio-surface-subtle)",
+          }}
+        >
           <button
             type="button"
             onClick={() => setActiveTab("inject")}
-            className={`pb-2.5 font-medium border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 font-semibold border-b-2 transition-colors duration-150 cursor-pointer flex items-center gap-1.5 ${
               activeTab === "inject"
-                ? "border-red-500 text-white font-bold"
-                : "border-transparent text-gray-400 hover:text-gray-200"
+                ? "border-studio-terracotta text-[var(--studio-text-primary)]"
+                : "border-transparent text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
-            <Zap className="w-3.5 h-3.5" /> Inject Fault
+            <Zap className="w-3.5 h-3.5" strokeWidth={1.5} /> Inject Fault
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("scenarios")}
-            className={`pb-2.5 font-medium border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 font-semibold border-b-2 transition-colors duration-150 cursor-pointer flex items-center gap-1.5 tabular-nums ${
               activeTab === "scenarios"
-                ? "border-red-500 text-white font-bold"
-                : "border-transparent text-gray-400 hover:text-gray-200"
+                ? "border-studio-terracotta text-[var(--studio-text-primary)]"
+                : "border-transparent text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
-            <Flame className="w-3.5 h-3.5" /> Scenario Library ({scenariosList.length})
+            <Flame className="w-3.5 h-3.5" strokeWidth={1.5} /> Scenario Library ({scenariosList.length})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("active")}
-            className={`pb-2.5 font-medium border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 font-semibold border-b-2 transition-colors duration-150 cursor-pointer flex items-center gap-1.5 tabular-nums ${
               activeTab === "active"
-                ? "border-red-500 text-white font-bold"
-                : "border-transparent text-gray-400 hover:text-gray-200"
+                ? "border-studio-terracotta text-[var(--studio-text-primary)]"
+                : "border-transparent text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
-            <AlertOctagon className="w-3.5 h-3.5" /> Active Incidents ({activeFaults.length})
+            <AlertOctagon className="w-3.5 h-3.5" strokeWidth={1.5} /> Active Incidents ({activeFaults.length})
           </button>
         </div>
 
@@ -354,33 +425,57 @@ export const ChaosControlModal: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Fault Selection Grid */}
               <div className="lg:col-span-7 space-y-3">
-                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                  Select Typed Fault (Failure Taxonomy CA-8)
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <span
+                  className="block text-xs font-semibold tracking-tight"
+                  style={{ color: "var(--studio-text-secondary)" }}
+                >
+                  Select fault type
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {FAULT_DEFINITIONS.map((f) => {
                     const isSelected = selectedFault === f.type;
                     return (
                       <button
                         key={f.type}
                         type="button"
+                        aria-pressed={isSelected}
                         onClick={() => {
                           setSelectedFault(f.type);
                           setTargetId(f.defaultTarget);
                         }}
-                        className={`text-left p-3 rounded-xl border transition cursor-pointer text-xs flex flex-col justify-between ${
+                        className={`text-left p-3.5 rounded-2xl border cursor-pointer text-xs flex flex-col justify-between transition-[border-color,background-color,box-shadow] duration-150 ${
                           isSelected
-                            ? "bg-red-950/40 border-red-500 text-white ring-1 ring-red-500/50"
-                            : "bg-gray-900/60 border-white/5 text-gray-300 hover:bg-gray-900 hover:border-white/20"
+                            ? "bg-studio-terracotta/12 border-studio-terracotta ring-1 ring-studio-terracotta/30"
+                            : "hover:border-[var(--studio-border-strong)]"
                         }`}
+                        style={
+                          isSelected
+                            ? { color: "var(--studio-text-primary)" }
+                            : {
+                                background: "var(--studio-surface)",
+                                borderColor: "var(--studio-border)",
+                                color: "var(--studio-text-secondary)",
+                              }
+                        }
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-gray-100">{f.label}</span>
-                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <span className="font-semibold" style={{ color: "var(--studio-text-primary)" }}>
+                            {f.label}
+                          </span>
+                          <span
+                            className="text-[10px] font-mono px-1.5 py-0.5 rounded-md border shrink-0"
+                            style={{
+                              background: "var(--studio-surface-subtle)",
+                              borderColor: "var(--studio-border)",
+                              color: "var(--studio-text-muted)",
+                            }}
+                          >
                             {f.category}
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-400 line-clamp-2">{f.desc}</p>
+                        <p className="text-[11px] line-clamp-2" style={{ color: "var(--studio-text-muted)" }}>
+                          {f.desc}
+                        </p>
                       </button>
                     );
                   })}
@@ -388,22 +483,39 @@ export const ChaosControlModal: React.FC = () => {
               </div>
 
               {/* Right Column: Parameters & Triggers */}
-              <div className="lg:col-span-5 flex flex-col justify-between space-y-4 bg-gray-900/40 p-4 rounded-xl border border-white/5">
+              <div
+                className="lg:col-span-5 flex flex-col justify-between space-y-4 p-4 rounded-2xl border"
+                style={{
+                  background: "var(--studio-surface-subtle)",
+                  borderColor: "var(--studio-border)",
+                }}
+              >
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                    <label
+                      htmlFor="chaos-target-input"
+                      className="block text-xs font-semibold mb-1.5"
+                      style={{ color: "var(--studio-text-secondary)" }}
+                    >
                       Target Entity / Coordinate
                     </label>
                     {selectedFault.startsWith("robot") || selectedFault === "battery_cascade" ? (
                       <select
+                        id="chaos-target-input"
                         value={targetId}
                         onChange={(e) => setTargetId(e.target.value)}
-                        className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-red-500"
+                        className="w-full rounded-xl border px-3 py-2 text-xs font-mono tabular-nums focus:outline-none focus:border-studio-terracotta"
+                        style={{
+                          background: "var(--studio-surface-elevated)",
+                          borderColor: "var(--studio-border-strong)",
+                          color: "var(--studio-text-primary)",
+                        }}
                       >
                         {robotIds.length > 0 ? (
                           robotIds.map((id) => (
                             <option key={id} value={id}>
-                              {id} ({robots[id]?.state || "IDLE"}, Bat {robots[id]?.battery_percent.toFixed(0)}%)
+                              {id} ({formatRobotState(robots[id]?.state || "IDLE")}, Bat{" "}
+                              {(robots[id]?.battery_percent ?? 100).toFixed(0)}%)
                             </option>
                           ))
                         ) : (
@@ -412,9 +524,15 @@ export const ChaosControlModal: React.FC = () => {
                       </select>
                     ) : selectedFault.startsWith("station") ? (
                       <select
+                        id="chaos-target-input"
                         value={targetId}
                         onChange={(e) => setTargetId(e.target.value)}
-                        className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-red-500"
+                        className="w-full rounded-xl border px-3 py-2 text-xs font-mono focus:outline-none focus:border-studio-terracotta"
+                        style={{
+                          background: "var(--studio-surface-elevated)",
+                          borderColor: "var(--studio-border-strong)",
+                          color: "var(--studio-text-primary)",
+                        }}
                       >
                         <option value="ST-01">ST-01 (Picking Station 1)</option>
                         <option value="ST-02">ST-02 (Picking Station 2)</option>
@@ -423,30 +541,49 @@ export const ChaosControlModal: React.FC = () => {
                       </select>
                     ) : (
                       <input
+                        id="chaos-target-input"
                         type="text"
                         value={targetId}
                         onChange={(e) => setTargetId(e.target.value)}
                         placeholder="e.g. cell:12,8 or BIN-001 or system"
-                        className="w-full bg-gray-950 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-red-500"
+                        className="w-full rounded-xl border px-3 py-2 text-xs font-mono focus:outline-none focus:border-studio-terracotta"
+                        style={{
+                          background: "var(--studio-surface-elevated)",
+                          borderColor: "var(--studio-border-strong)",
+                          color: "var(--studio-text-primary)",
+                        }}
                       />
                     )}
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-gray-300">Duration (ticks)</span>
-                      <span className="font-mono text-red-400 font-bold">{durationTicks} ticks ({(durationTicks * 0.1).toFixed(1)}s)</span>
+                    <div className="flex items-center justify-between text-xs mb-1.5 tabular-nums">
+                      <label
+                        htmlFor="chaos-duration-range"
+                        className="font-semibold"
+                        style={{ color: "var(--studio-text-secondary)" }}
+                      >
+                        Duration (ticks)
+                      </label>
+                      <span className="font-mono text-[#A53420] dark:text-studio-coral font-semibold">
+                        {durationTicks} ticks ({(durationTicks * 0.1).toFixed(1)}s)
+                      </span>
                     </div>
                     <input
+                      id="chaos-duration-range"
                       type="range"
                       min={20}
                       max={600}
                       step={10}
                       value={durationTicks}
                       onChange={(e) => setDurationTicks(Number(e.target.value))}
-                      className="w-full accent-red-500 cursor-pointer"
+                      className="w-full cursor-pointer"
+                      style={{ accentColor: "var(--studio-accent-solid)" }}
                     />
-                    <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
+                    <div
+                      className="flex justify-between text-[10px] font-mono mt-1 tabular-nums"
+                      style={{ color: "var(--studio-text-muted)" }}
+                    >
                       <span>20t (2s)</span>
                       <span>200t (20s)</span>
                       <span>600t (60s)</span>
@@ -455,14 +592,17 @@ export const ChaosControlModal: React.FC = () => {
                 </div>
 
                 {/* Primary Inject Actions */}
-                <div className="space-y-2 pt-4 border-t border-white/10">
+                <div
+                  className="space-y-2 pt-4 border-t"
+                  style={{ borderColor: "var(--studio-border)" }}
+                >
                   <button
                     type="button"
                     onClick={handleInject}
                     disabled={submitting}
-                    className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition active:scale-98 cursor-pointer disabled:opacity-50"
+                    className="studio-btn w-full py-2.5 rounded-xl bg-[var(--studio-accent-solid)] hover:bg-[var(--studio-accent-hover)] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-50"
                   >
-                    <Zap className="w-4 h-4" />
+                    <Zap className="w-4 h-4" strokeWidth={1.5} />
                     Inject Single Fault
                   </button>
 
@@ -470,19 +610,25 @@ export const ChaosControlModal: React.FC = () => {
                     type="button"
                     onClick={handlePerfectStorm}
                     disabled={submitting}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-600 via-red-600 to-purple-600 hover:from-orange-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 transition active:scale-98 cursor-pointer disabled:opacity-50"
+                    className="studio-btn w-full py-2.5 rounded-xl bg-[var(--studio-accent-solid)] hover:bg-[var(--studio-accent-hover)] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-50"
+                    style={{ boxShadow: "var(--studio-shadow)" }}
                   >
-                    <Flame className="w-4 h-4" />
-                    UNLEASH "PERFECT STORM"
+                    <Flame className="w-4 h-4" strokeWidth={1.5} />
+                    Trigger perfect storm
                   </button>
 
                   <button
                     type="button"
                     onClick={handleClearAll}
                     disabled={submitting}
-                    className="w-full py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium text-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer disabled:opacity-50"
+                    className="studio-btn w-full py-2 rounded-xl border font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    style={{
+                      background: "var(--studio-surface-elevated)",
+                      borderColor: "var(--studio-border-strong)",
+                      color: "var(--studio-text-primary)",
+                    }}
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} />
                     Clear & Heal All Faults
                   </button>
                 </div>
@@ -492,18 +638,22 @@ export const ChaosControlModal: React.FC = () => {
 
           {activeTab === "scenarios" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Preset Chaos Scenarios (7/7 in scenarios/chaos/)</h3>
-                  <p className="text-xs text-gray-400">Pre-scripted resilience benchmarks with holdout seeds</p>
+                  <h3 className="text-sm font-semibold tabular-nums" style={{ color: "var(--studio-text-primary)" }}>
+                    Preset chaos scenarios
+                  </h3>
+                  <p className="text-xs" style={{ color: "var(--studio-text-muted)" }}>
+                    Pre-scripted resilience benchmarks with holdout seeds
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleLoadScenario}
                   disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition active:scale-95"
+                  className="studio-btn px-4 py-2 rounded-xl bg-[var(--studio-accent-solid)] hover:bg-[var(--studio-accent-hover)] text-white text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm shrink-0 disabled:opacity-50"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <Play className="w-3.5 h-3.5 fill-current" strokeWidth={1.5} />
                   Run Selected Scenario
                 </button>
               </div>
@@ -548,33 +698,51 @@ export const ChaosControlModal: React.FC = () => {
                 ].map((sc) => {
                   const isSelected = selectedScenario === sc.name;
                   return (
-                    <div
+                    <button
                       key={sc.name}
+                      type="button"
+                      aria-pressed={isSelected}
                       onClick={() => setSelectedScenario(sc.name)}
-                      className={`p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+                      className={`w-full text-left p-4 rounded-2xl border cursor-pointer flex flex-col justify-between transition-[border-color,background-color,box-shadow] duration-150 ${
                         isSelected
-                          ? "bg-red-950/40 border-red-500 text-white shadow-md ring-1 ring-red-500/50"
-                          : "bg-gray-900/60 border-white/5 text-gray-300 hover:bg-gray-900 hover:border-white/20"
+                          ? "bg-studio-terracotta/12 border-studio-terracotta ring-1 ring-studio-terracotta/30"
+                          : "hover:border-[var(--studio-border-strong)]"
                       }`}
+                      style={
+                        isSelected
+                          ? { color: "var(--studio-text-primary)" }
+                          : {
+                              background: "var(--studio-surface)",
+                              borderColor: "var(--studio-border)",
+                              color: "var(--studio-text-secondary)",
+                            }
+                      }
                     >
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-sm text-gray-100">{sc.title}</span>
-                          <span className="font-mono text-[10px] text-red-400 bg-red-950/60 px-1.5 py-0.5 rounded border border-red-800/40">
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <span className="font-semibold text-sm" style={{ color: "var(--studio-text-primary)" }}>
+                            {sc.title}
+                          </span>
+                          <span className="font-mono text-[10px] text-[#A53420] dark:text-studio-coral bg-studio-terracotta/12 px-2 py-0.5 rounded-md border border-studio-terracotta/25 shrink-0">
                             {sc.name}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">{sc.desc}</p>
+                        <p className="text-xs mt-1" style={{ color: "var(--studio-text-muted)" }}>
+                          {sc.desc}
+                        </p>
                       </div>
-                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5 text-[11px]">
-                        <span className="text-emerald-400 font-mono flex items-center gap-1">
-                          <ShieldAlert className="w-3.5 h-3.5" /> 100% Invariant Safety Guard
+                      <div
+                        className="flex items-center justify-between mt-3 pt-2.5 border-t text-[11px] w-full"
+                        style={{ borderColor: "var(--studio-border)" }}
+                      >
+                        <span className="text-[#1D6144] dark:text-emerald-300 font-mono flex items-center gap-1 tabular-nums">
+                          <ShieldAlert className="w-3.5 h-3.5" strokeWidth={1.5} /> 100% Invariant Safety Guard
                         </span>
-                        <span className="text-cyan-400 flex items-center gap-1 font-semibold">
-                          Select <ArrowRight className="w-3 h-3" />
+                        <span className="text-[#A53420] dark:text-studio-coral flex items-center gap-1 font-semibold">
+                          Select <ArrowRight className="w-3 h-3" strokeWidth={1.5} />
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -585,53 +753,87 @@ export const ChaosControlModal: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Active Incidents & Live Healing</h3>
-                  <p className="text-xs text-gray-400">Faults currently active in simulation engine</p>
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--studio-text-primary)" }}>
+                    Active Incidents & Live Healing
+                  </h3>
+                  <p className="text-xs" style={{ color: "var(--studio-text-muted)" }}>
+                    Faults currently active in simulation engine
+                  </p>
                 </div>
                 {activeFaults.length > 0 && (
                   <button
                     type="button"
                     onClick={handleClearAll}
                     disabled={submitting}
-                    className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-200 flex items-center gap-1.5 cursor-pointer"
+                    className="studio-btn px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    style={{
+                      background: "var(--studio-surface-subtle)",
+                      borderColor: "var(--studio-border-strong)",
+                      color: "var(--studio-text-primary)",
+                    }}
                   >
-                    <RotateCcw className="w-3.5 h-3.5" /> Clear All
+                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} /> Clear All
                   </button>
                 )}
               </div>
 
               {activeFaults.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-gray-900/20">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
-                  <p className="text-sm font-semibold text-gray-300">Warehouse Operating Under Nominal Conditions</p>
-                  <p className="text-xs text-gray-500 mt-1">No active chaos faults or degraded operational modes.</p>
+                <div
+                  className="text-center py-12 border border-dashed rounded-2xl"
+                  style={{
+                    borderColor: "var(--studio-border-strong)",
+                    background: "var(--studio-surface-subtle)",
+                  }}
+                >
+                  <CheckCircle2
+                    className="w-10 h-10 text-[#1D6144] dark:text-emerald-300 mx-auto mb-2 opacity-85"
+                    strokeWidth={1.5}
+                  />
+                  <p className="text-sm font-semibold" style={{ color: "var(--studio-text-primary)" }}>
+                    Warehouse Operating Under Nominal Conditions
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--studio-text-muted)" }}>
+                    No active chaos faults or degraded operational modes.
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {activeFaults.map((af) => (
                     <div
                       key={af.fault_id}
-                      className="p-3.5 rounded-xl bg-red-950/20 border border-red-500/30 flex items-center justify-between text-xs"
+                      className="p-3.5 rounded-2xl bg-studio-crimson/[0.08] border border-studio-crimson/25 flex items-center justify-between text-xs"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center font-bold">
-                          <ZapOff className="w-4 h-4" />
+                        <div className="w-8 h-8 rounded-xl bg-studio-crimson/15 border border-studio-crimson/25 text-[#9E2418] dark:text-red-400 flex items-center justify-center">
+                          <ZapOff className="w-4 h-4" strokeWidth={1.5} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-white">{af.fault_type}</span>
-                            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-gray-900 text-cyan-300 border border-white/10">
+                            <span className="font-semibold" style={{ color: "var(--studio-text-primary)" }}>
+                              {af.fault_type}
+                            </span>
+                            <span
+                              className="font-mono text-[10px] px-2 py-0.5 rounded-lg border tabular-nums"
+                              style={{
+                                background: "var(--studio-surface-elevated)",
+                                borderColor: "var(--studio-border)",
+                                color: "var(--studio-text-secondary)",
+                              }}
+                            >
                               Target: {af.target_id}
                             </span>
                           </div>
-                          <span className="text-[11px] text-gray-400">
+                          <span
+                            className="text-[11px] tabular-nums"
+                            style={{ color: "var(--studio-text-muted)" }}
+                          >
                             Injected at T+{af.injected_tick} · Duration {af.duration_ticks}t
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 font-mono">
-                        <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
-                          RECOVERING
+                        <span className="px-2.5 py-1 rounded-lg bg-studio-amber/15 text-[#8F4F0D] dark:text-amber-300 border border-studio-amber/30 text-[10px] font-semibold">
+                          Recovering
                         </span>
                       </div>
                     </div>
@@ -643,15 +845,27 @@ export const ChaosControlModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-white/10 bg-gray-950/80 flex items-center justify-between text-xs text-gray-400">
-          <div className="flex items-center gap-1.5 font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <div
+          className="px-6 py-3 border-t flex items-center justify-between text-xs"
+          style={{
+            borderColor: "var(--studio-border)",
+            background: "var(--studio-surface-subtle)",
+            color: "var(--studio-text-muted)",
+          }}
+        >
+          <div className="flex items-center gap-2 font-mono tabular-nums">
+            <span className="w-2 h-2 rounded-full bg-studio-sage dark:bg-emerald-400" />
             <span>SafetyGuard Invariant Active: 0 Collisions Permitted</span>
           </div>
           <button
             type="button"
-            onClick={() => setStore({ isChaosControlOpen: false })}
-            className="px-4 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-200 border border-white/10 text-xs font-semibold cursor-pointer"
+            onClick={handleClose}
+            className="studio-btn px-4 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer"
+            style={{
+              background: "var(--studio-surface-elevated)",
+              borderColor: "var(--studio-border-strong)",
+              color: "var(--studio-text-primary)",
+            }}
           >
             Close
           </button>

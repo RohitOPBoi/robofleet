@@ -28,13 +28,17 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from robofleet.adapters.demand_engine import SyntheticDemandEngine
 from robofleet.adapters.webhook import WebhookOrderSource
 from robofleet.api.ws import WebSocketManager
+from robofleet.brain.credentials import PROVIDER_PRESETS, SecretRedactingFilter, resolve_preset
 from robofleet.brain.orchestrator import MissionOrchestrator
+from robofleet.brain.providers.ai_mode import UnifiedAIProvider
+from robofleet.brain.providers.ollama import OllamaProvider
 from robofleet.brain.supervisor import SupervisorCommandParser
+from robofleet.config.models import AICloudConfig, LocalLLMConfig
 from robofleet.contracts.commands import (
     BlockCellsCommand,
     EmergencyStopCommand,
@@ -103,10 +107,42 @@ class OrderIngestRequest(BaseModel):
 
 class BrainModeRequest(BaseModel):
     enabled: bool
+    mode: Literal["heuristic", "ai", "local_llm", "replay", "baseline"] | None = None
 
 
 class BrainProviderRequest(BaseModel):
-    provider: Literal["heuristic", "anthropic", "replay"]
+    provider: Literal["heuristic", "ai", "local_llm", "replay", "anthropic", "baseline"]
+
+
+class AICloudConfigUpdateRequest(BaseModel):
+    provider_type: str | None = None
+    provider_label: str | None = None
+    api_compatibility: Literal["openai_chat", "openai_responses", "anthropic_messages"] | None = None
+    base_url: str | None = None
+    model: str | None = None
+    organization_id: str | None = None
+    project_id: str | None = None
+    timeout_s: float | None = Field(default=None, ge=1.0, le=180.0)
+    max_tokens: int | None = Field(default=None, ge=64, le=8192)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    retry_count: int | None = Field(default=None, ge=0, le=5)
+    fallback_policy: Literal["heuristic", "safe_wait"] | None = None
+    api_key: str | None = None
+    clear_api_key: bool = False
+    activate: bool = False
+
+
+class LocalLLMConfigUpdateRequest(BaseModel):
+    base_url: str | None = None
+    model: str | None = None
+    timeout_s: float | None = Field(default=None, ge=1.0, le=180.0)
+    context_length: int | None = Field(default=None, ge=512, le=32768)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, ge=64, le=4096)
+    retry_count: int | None = Field(default=None, ge=0, le=5)
+    max_concurrency: int | None = Field(default=None, ge=1, le=4)
+    fallback_policy: Literal["heuristic", "safe_wait"] | None = None
+    activate: bool = False
 
 
 class BrainApprovalActionRequest(BaseModel):
@@ -160,6 +196,16 @@ def create_app(
     if orchestrator is None:
         rules_dir = getattr(getattr(config, "rules", None), "rules_dir", "rules")
         orchestrator = MissionOrchestrator(engine=engine, rules_dir=rules_dir)
+
+    cred_store = getattr(orchestrator, "credential_store", None)
+    if cred_store is not None:
+        import logging as _logging
+
+        for _log_name in ("robofleet", "httpx", "httpcore", "uvicorn.error", "uvicorn.access"):
+            _logger_obj = _logging.getLogger(_log_name)
+            if not any(isinstance(f, SecretRedactingFilter) for f in _logger_obj.filters):
+                _logger_obj.addFilter(SecretRedactingFilter(cred_store))
+
     supervisor_parser = SupervisorCommandParser()
     ws_manager = WebSocketManager(pacer=pacer, orchestrator=orchestrator)
     pacing_task: asyncio.Task[None] | None = None
@@ -375,6 +421,13 @@ def create_app(
         dump = config.model_dump()
         if "server" in dump and "auth_token" in dump["server"]:
             dump["server"]["auth_token"] = "[REDACTED]"
+        if "brain" in dump:
+            status_snapshot = orchestrator.get_status_summary()
+            dump["brain"]["cloud"] = {
+                **status_snapshot["ai_cloud"],
+                "operating_mode": status_snapshot["operating_mode"],
+            }
+            dump["brain"]["local"] = status_snapshot["local_llm"]
         return dump
 
     @app.get("/api/rules")
@@ -628,34 +681,218 @@ def create_app(
     # AI Operations Brain Endpoints (Phase 5)
     @app.get("/api/brain/status")
     async def get_brain_status() -> dict[str, Any]:
-        provider = orchestrator.get_active_provider()
-        anthropic = getattr(orchestrator, "anthropic_provider", None)
-        circuit_tripped = getattr(anthropic, "circuit_tripped", False) if anthropic else False
-        approvals = list(orchestrator.governance.approvals_queue.pending.values())
-        return {
-            "enabled": orchestrator.enabled,
-            "mode": "ai" if orchestrator.enabled else "baseline",
-            "provider": orchestrator.provider_name,
-            "circuit_breaker_tripped": circuit_tripped,
-            "decisions_count": len(orchestrator.decisions),
-            "pending_approvals_count": len(approvals),
-            "held_zones": list(orchestrator.held_zones),
-            "total_cost_usd": getattr(anthropic, "total_cost_usd", 0.0) if anthropic else 0.0,
-        }
+        summary = orchestrator.get_status_summary()
+        summary["circuit_breaker_tripped"] = summary.get("circuit_tripped", False)
+        summary["pending_approvals_count"] = summary.get("approvals_pending", 0)
+        return summary
 
     @app.post("/api/brain/mode", dependencies=[Depends(verify_auth_token)])
     async def set_brain_mode(req: BrainModeRequest) -> dict[str, Any]:
+        if req.mode:
+            try:
+                orchestrator.set_provider(req.mode)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         orchestrator.set_mode(req.enabled)
-        return {
-            "status": "ok",
-            "enabled": orchestrator.enabled,
-            "mode": "ai" if orchestrator.enabled else "baseline",
-        }
+        summary = orchestrator.get_status_summary()
+        return {"status": "ok", **summary}
 
     @app.post("/api/brain/provider", dependencies=[Depends(verify_auth_token)])
     async def set_brain_provider(req: BrainProviderRequest) -> dict[str, Any]:
-        orchestrator.set_provider(req.provider)
-        return {"status": "ok", "provider": orchestrator.provider_name}
+        try:
+            orchestrator.set_provider(req.provider)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        summary = orchestrator.get_status_summary()
+        return {"status": "ok", **summary}
+
+    @app.get("/api/brain/config")
+    async def get_brain_config() -> dict[str, Any]:
+        summary = orchestrator.get_status_summary()
+        return {
+            "enabled": summary["enabled"],
+            "mode": summary["mode"],
+            "operating_mode": summary["operating_mode"],
+            "ai_cloud": summary["ai_cloud"],
+            "local_llm": summary["local_llm"],
+            "presets": [
+                {
+                    "id": p.id,
+                    "provider_type": p.provider_type,
+                    "label": p.label,
+                    "api_compatibility": p.api_compatibility,
+                    "default_base_url": p.default_base_url,
+                    "default_model": p.default_model,
+                    "suggested_models": list(p.suggested_models),
+                    "env_vars": list(p.env_var_names),
+                }
+                for p in PROVIDER_PRESETS.values()
+            ],
+        }
+
+    def _merge_cloud_config(req: AICloudConfigUpdateRequest) -> AICloudConfig:
+        merged = orchestrator.brain_config.cloud.model_dump()
+        updates = req.model_dump(
+            exclude={"api_key", "clear_api_key", "activate"}, exclude_none=True
+        )
+        raw_pt = updates.get("provider_type")
+        if raw_pt and raw_pt in PROVIDER_PRESETS:
+            preset = PROVIDER_PRESETS[raw_pt]
+            updates["provider_type"] = preset.provider_type
+            updates.setdefault("provider_label", preset.label)
+            updates.setdefault("api_compatibility", preset.api_compatibility)
+            updates.setdefault("base_url", preset.default_base_url)
+            if not updates.get("model"):
+                updates["model"] = preset.default_model
+        elif raw_pt and raw_pt != merged.get("provider_type"):
+            preset = resolve_preset(raw_pt)
+            updates.setdefault("provider_label", preset.label)
+            updates.setdefault("api_compatibility", preset.api_compatibility)
+            updates.setdefault("base_url", preset.default_base_url)
+            if not updates.get("model"):
+                updates["model"] = preset.default_model
+        merged.update(updates)
+        return AICloudConfig.model_validate(merged)
+
+    @app.post("/api/brain/ai/config", dependencies=[Depends(verify_auth_token)])
+    async def update_ai_config(req: AICloudConfigUpdateRequest) -> dict[str, Any]:
+        try:
+            new_cfg = _merge_cloud_config(req)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+        orchestrator.update_ai_cloud_config(
+            new_cfg,
+            api_key=req.api_key,
+            clear_api_key=req.clear_api_key,
+        )
+        if req.activate:
+            orchestrator.set_provider("ai")
+        return {"status": "ok", "brain_status": orchestrator.get_status_summary()}
+
+    @app.post("/api/brain/ai/test", dependencies=[Depends(verify_auth_token)])
+    async def test_ai_connection(req: AICloudConfigUpdateRequest | None = None) -> dict[str, Any]:
+        from robofleet.brain.credentials import SecretCredentialStore
+
+        req_obj = req or AICloudConfigUpdateRequest()
+        try:
+            probe_cfg = _merge_cloud_config(req_obj)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+        probe_store = SecretCredentialStore()
+        probe_provider = UnifiedAIProvider(cloud_config=probe_cfg, credential_store=probe_store)
+        profile_keys = {
+            probe_cfg.provider_type.strip().lower(),
+            probe_provider.current_profile_key,
+        }
+        existing_key = ""
+        for k in (
+            orchestrator.ai_provider.current_profile_key,
+            orchestrator.brain_config.cloud.provider_type.strip().lower(),
+            *profile_keys,
+        ):
+            existing_key = orchestrator.credential_store.get_key(k)
+            if existing_key:
+                break
+
+        secret_to_use = (
+            req_obj.api_key.strip()
+            if req_obj.api_key and req_obj.api_key.strip()
+            else ("" if req_obj.clear_api_key else existing_key)
+        )
+        if secret_to_use:
+            for k in profile_keys:
+                probe_store.set_key(k, secret_to_use)
+        health = await probe_provider.test_connection()
+        orchestrator.ai_provider.last_health_status = health
+
+        adapter = probe_provider.get_active_adapter()
+        models = list(health.available_models)
+        if health.ok and not models and hasattr(adapter, "list_models"):
+            listed = await adapter.list_models()
+            if isinstance(listed, list):
+                models = listed
+            elif isinstance(listed, tuple) and len(listed) >= 2 and listed[0]:
+                models = list(listed[1])
+
+        safe_msg = probe_store.redact(orchestrator.credential_store.redact(health.message))
+        return {
+            "ok": health.ok,
+            "status": health.status,
+            "provider": health.provider_name,
+            "model": health.model_name,
+            "latency_ms": health.latency_ms,
+            "message": safe_msg,
+            "available_models": models,
+        }
+
+    @app.get("/api/brain/local/status")
+    async def get_local_llm_status() -> dict[str, Any]:
+        health = await orchestrator.local_provider.check_health(force=True)
+        models = list(health.available_models)
+        recommended = "qwen3.5:4b"
+        summary = orchestrator.get_status_summary()["local_llm"]
+        return {
+            "ok": health.ok,
+            "status": health.status,
+            "message": health.message,
+            "latency_ms": health.latency_ms,
+            "installed_models": models,
+            "recommended_model": recommended,
+            "recommended_model_installed": any(recommended in m for m in models),
+            "local_llm": summary,
+        }
+
+    @app.post("/api/brain/local/config", dependencies=[Depends(verify_auth_token)])
+    async def update_local_config(req: LocalLLMConfigUpdateRequest) -> dict[str, Any]:
+        updates = req.model_dump(exclude={"activate"}, exclude_none=True)
+        try:
+            merged = {**orchestrator.brain_config.local.model_dump(), **updates}
+            cfg_obj = LocalLLMConfig.model_validate(merged)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+        orchestrator.update_local_llm_config(cfg_obj)
+        if req.activate:
+            orchestrator.set_provider("local_llm")
+        return {"status": "ok", "brain_status": orchestrator.get_status_summary()}
+
+    @app.post("/api/brain/local/test", dependencies=[Depends(verify_auth_token)])
+    async def test_local_connection(req: LocalLLMConfigUpdateRequest | None = None) -> dict[str, Any]:
+        req_obj = req or LocalLLMConfigUpdateRequest()
+        updates = req_obj.model_dump(exclude={"activate"}, exclude_none=True)
+        merged = {**orchestrator.brain_config.local.model_dump(), **updates}
+        try:
+            cfg_obj = LocalLLMConfig.model_validate(merged)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+        probe_ollama = OllamaProvider()
+        probe_ollama.apply_config(cfg_obj)
+        health = await probe_ollama.check_health(force=True)
+        if req is None or not updates:
+            orchestrator.local_provider.last_health_status = health
+        models = list(health.available_models)
+        return {
+            "ok": health.ok,
+            "status": health.status,
+            "provider": health.provider_name,
+            "model": health.model_name,
+            "latency_ms": health.latency_ms,
+            "message": health.message,
+            "available_models": models,
+            "recommended_model": "qwen3.5:4b",
+            "recommended_model_installed": any("qwen3.5:4b" in m for m in models),
+        }
+
+    @app.get("/api/brain/metrics")
+    async def get_brain_metrics() -> dict[str, Any]:
+        current_tick = engine.clock.tick
+        return {
+            **orchestrator.get_operational_metrics(),
+            "deadlocks": [d.model_dump() for d in orchestrator._get_deadlocks(current_tick)],
+        }
 
     @app.get("/api/brain/decisions")
     async def get_brain_decisions(limit: int = 50) -> list[dict[str, Any]]:

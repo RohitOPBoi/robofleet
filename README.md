@@ -188,7 +188,7 @@ robofleet/
 │   ├── src/robofleet/
 │   │   ├── adapters/          # Order sources: Synthetic demand, CSV replay, Webhooks
 │   │   ├── api/               # FastAPI application, auth middleware, WebSocket manager
-│   │   ├── brain/             # AI Orchestrator, Anthropic LLM provider, supervisor NLP
+│   │   ├── brain/             # AI Orchestrator, Cloud AI & Local Ollama providers, deadlock recovery
 │   │   ├── catalogue/         # SKU generator, co-purchase affinity, popularity slotting
 │   │   ├── chaos/             # Fault registry, self-healing manager, degraded modes
 │   │   ├── cli/               # CLI commands (serve, run, drills, export-schemas)
@@ -270,6 +270,16 @@ Run headless simulation runs for benchmarking and algorithmic throughput validat
 uv run python -m robofleet.cli run --scenario standard --duration 3600 --strategy batch_greedy
 ```
 
+### AI Operating Modes (Heuristic, Cloud AI Mode, Local LLM Mode)
+RoboFleet supports four runtime intelligence modes switchable from the top bar or via **AI & Local Settings** without restarting the server:
+- **Heuristic Mode**: Fast deterministic multi-specialist rule engine (0 ms network latency, zero external dependencies).
+- **AI Mode (Cloud API)**: Provider-independent cloud inference supporting user-entered API keys, custom endpoints, `openai_chat` / `openai_responses` / `anthropic_messages` compatibility, and presets for OpenAI, OpenRouter, Groq, Together AI, Fireworks AI, DeepSeek, Anthropic, and custom OpenAI-compatible gateways. Keys stay in backend memory only and are never persisted to `localStorage` or returned by config endpoints.
+- **Local LLM Mode (Ollama)**: Zero-cost local inference via Ollama (`http://localhost:11434`). Recommended initial model: **`qwen3.5:4b`**:
+  ```bash
+  ollama pull qwen3.5:4b
+  ```
+- **Replay Mode & Baseline**: File-backed deterministic NDJSON replay or fixed baseline dispatcher (`BASE`) for reproducible comparative evaluation.
+
 ---
 
 ## 📡 API & Streaming Protocol
@@ -288,6 +298,9 @@ uv run python -m robofleet.cli run --scenario standard --duration 3600 --strateg
 | `POST` | `/api/control/emergency_stop` | Bearer | Immediate fleet-wide or zone-specific hardware e-stop |
 | `POST` | `/api/chaos/inject` | Bearer | Inject specific fault into target robot or station |
 | `POST` | `/api/chaos/load_scenario` | Bearer | Load and schedule a complete YAML chaos scenario |
+| `POST` | `/api/brain/provider` | Bearer | Switch AI Brain operating mode (`baseline`, `heuristic`, `ai`, `local_llm`, `replay`) |
+| `POST` | `/api/brain/ai/config` | Bearer | Configure Cloud AI endpoint, model, and in-memory API key |
+| `POST` | `/api/brain/local/test` | Bearer | Verify Ollama availability and installed local models (`qwen3.5:4b`) |
 | `POST` | `/api/brain/supervisor/command` | Bearer | Process natural language query or operational command |
 
 ### WebSocket Delta Streaming Protocol (`ws://localhost:8000/ws`)

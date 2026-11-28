@@ -188,6 +188,17 @@ class SimEngine:
         self.seq: int = 0
         self.visited_cells_per_robot: dict[str, set[tuple[int, int]]] = {}
 
+        # AI Brain traffic coordination & epoch state
+        self.world_epoch: int = getattr(self, "world_epoch", 0) + 1
+        self.last_destinations: dict[str, Coordinate] = {}
+        self.ai_yield_directives: dict[str, tuple[Coordinate, int, str | None]] = {}
+        self.ai_avoid_cells: dict[str, tuple[set[tuple[int, int]], int]] = {}
+        self.ai_charge_overrides: dict[str, Coordinate] = {}
+        self.ai_move_overrides: dict[str, tuple[Coordinate, int]] = {}
+        self.ai_priority_boost: dict[str, int] = {}
+        self.held_zones_until: dict[str, int] = {}
+        self.held_zone_cells: set[tuple[int, int]] = set()
+
         # Charger locations
         self.charger_cells = {c.pos.as_tuple() for c in layout.chargers}
 
@@ -306,6 +317,119 @@ class SimEngine:
                 self.robots.remove(r)
                 self.emit_event("fleet.robot_retired", {"robot_id": r.robot_id})
 
+    def _rebuild_held_zone_cells(self) -> None:
+        cells: set[tuple[int, int]] = set()
+        for zone in self.layout.zones:
+            if zone.name in self.held_zones_until:
+                x0 = min(zone.top_left.x, zone.bottom_right.x)
+                x1 = max(zone.top_left.x, zone.bottom_right.x)
+                y0 = min(zone.top_left.y, zone.bottom_right.y)
+                y1 = max(zone.top_left.y, zone.bottom_right.y)
+                for y in range(y0, y1 + 1):
+                    for x in range(x0, x1 + 1):
+                        cells.add((x, y))
+        self.held_zone_cells = cells
+
+    def hold_zone(self, zone_id: str, duration_ticks: int | None = None) -> bool:
+        """Holds traffic out of a named layout zone until released or duration expires."""
+        if not any(z.name == zone_id for z in self.layout.zones):
+            return False
+        until = (
+            self.clock.tick + duration_ticks
+            if duration_ticks is not None and duration_ticks > 0
+            else -1
+        )
+        self.held_zones_until[zone_id] = until
+        self._rebuild_held_zone_cells()
+        self.emit_event("traffic.zone_held", {"zone_id": zone_id, "until_tick": until})
+        return True
+
+    def release_zone(self, zone_id: str | None = None) -> list[str]:
+        """Releases one held zone or all held zones."""
+        released: list[str] = []
+        if zone_id:
+            if zone_id in self.held_zones_until:
+                del self.held_zones_until[zone_id]
+                released.append(zone_id)
+        else:
+            released = sorted(self.held_zones_until.keys())
+            self.held_zones_until.clear()
+        if released:
+            self._rebuild_held_zone_cells()
+            self.emit_event("traffic.zone_released", {"zone_ids": released})
+        return released
+
+    def _apply_ai_traffic_directives(
+        self,
+        destinations: dict[str, Coordinate],
+    ) -> tuple[dict[str, set[tuple[int, int]]], set[str]]:
+        """Expires stale AI directives and overlays active yield/avoid/charge/move overrides."""
+        tick = self.clock.tick
+        robots_by_id = {r.robot_id: r for r in self.robots}
+
+        expired_zones = [
+            z_id for z_id, until in self.held_zones_until.items() if until >= 0 and tick > until
+        ]
+        if expired_zones:
+            for z_id in expired_zones:
+                del self.held_zones_until[z_id]
+            self._rebuild_held_zone_cells()
+
+        priority_robots: set[str] = set()
+        for r_id, until in list(self.ai_priority_boost.items()):
+            if tick > until or r_id not in robots_by_id:
+                del self.ai_priority_boost[r_id]
+            else:
+                priority_robots.add(r_id)
+
+        per_robot_avoid: dict[str, set[tuple[int, int]]] = {}
+        for r_id, (cells, until) in list(self.ai_avoid_cells.items()):
+            if tick > until or r_id not in robots_by_id:
+                del self.ai_avoid_cells[r_id]
+            elif cells:
+                per_robot_avoid[r_id] = set(cells)
+
+        for r_id, (target, until) in list(self.ai_move_overrides.items()):
+            robot = robots_by_id.get(r_id)
+            if not robot or tick > until or robot.state == RobotState.UNAVAILABLE:
+                del self.ai_move_overrides[r_id]
+                continue
+            if robot.cell == target:
+                del self.ai_move_overrides[r_id]
+                continue
+            destinations[r_id] = target
+
+        for r_id, (yield_cell, until, right_of_way_id) in list(self.ai_yield_directives.items()):
+            robot = robots_by_id.get(r_id)
+            if (
+                not robot
+                or tick > until
+                or robot.state in (RobotState.UNAVAILABLE, RobotState.CHARGING)
+                or robot.fault is not None
+            ):
+                del self.ai_yield_directives[r_id]
+                continue
+            destinations[r_id] = yield_cell
+            if right_of_way_id and right_of_way_id in robots_by_id:
+                priority_robots.add(right_of_way_id)
+
+        for r_id, charger_coord in list(self.ai_charge_overrides.items()):
+            robot = robots_by_id.get(r_id)
+            if (
+                not robot
+                or robot.state == RobotState.UNAVAILABLE
+                or robot.battery_pct >= self.config.battery.recharge_target_pct
+            ):
+                del self.ai_charge_overrides[r_id]
+                continue
+            if robot.state == RobotState.CHARGING or robot.cell == charger_coord:
+                destinations[r_id] = charger_coord
+                del self.ai_charge_overrides[r_id]
+                continue
+            destinations[r_id] = charger_coord
+
+        return per_robot_avoid, priority_robots
+
     def step(self) -> None:
         """Executes one simulation tick according to the 9-step contract."""
         # Step 1: Apply queued commands
@@ -375,15 +499,32 @@ class SimEngine:
                 rng=self.disp_rng,
             )
 
+        # Apply active AI Brain operational directives (yield, charge route, move override, avoid cells)
+        per_robot_avoid, priority_robots = self._apply_ai_traffic_directives(destinations)
+        self.last_destinations = dict(destinations)
+
         # Step 5: Planner proposes move intents
-        intents, deadlocked_robots = self.planner.plan_intents(
-            robots=self.robots,
-            destinations=destinations,
-            layout=self.layout,
-            blocked_cells=self.safety_guard.blocked_cells,
-            rng=self.planner_rng,
-            current_tick=self.clock.tick,
-        )
+        effective_blocked = self.safety_guard.blocked_cells | self.held_zone_cells
+        if per_robot_avoid or priority_robots:
+            intents, deadlocked_robots = self.planner.plan_intents(
+                robots=self.robots,
+                destinations=destinations,
+                layout=self.layout,
+                blocked_cells=effective_blocked,
+                rng=self.planner_rng,
+                current_tick=self.clock.tick,
+                per_robot_avoid=per_robot_avoid,
+                priority_robots=priority_robots,
+            )
+        else:
+            intents, deadlocked_robots = self.planner.plan_intents(
+                robots=self.robots,
+                destinations=destinations,
+                layout=self.layout,
+                blocked_cells=effective_blocked,
+                rng=self.planner_rng,
+                current_tick=self.clock.tick,
+            )
         for d_id in deadlocked_robots:
             self.emit_event("sim.deadlock_detected", {"robot_id": d_id})
 

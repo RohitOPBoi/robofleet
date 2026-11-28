@@ -62,7 +62,7 @@ async def run_single_eval_mode(
     decisions_log = output_log_dir / f"decisions_{mode}_seed_{seed}.ndjson"
     orchestrator = MissionOrchestrator(
         engine=engine,
-        provider_name="heuristic" if mode == "heuristic" else ("anthropic" if mode == "ai" else "heuristic"),
+        provider_name=mode if mode != "baseline" else "heuristic",
         rules_dir="rules",
         decisions_log_path=decisions_log,
     )
@@ -80,12 +80,17 @@ async def run_single_eval_mode(
             if d:
                 all_decisions.append(d)
 
+    if orchestrator.enabled:
+        orchestrator.flush_pending_outcomes(engine.clock.tick)
+
     kpis = engine.get_dynamic_state().kpis
+    metrics = orchestrator.get_operational_metrics() if orchestrator.enabled else {}
 
     # Aggregate decision metrics
     latencies = [d.latency_ms for d in all_decisions]
     governance_denials = sum(1 for d in all_decisions if d.governance_outcome == "denied")
     safety_rejections = sum(1 for d in all_decisions if d.execution_result == "rejected_by_safety")
+    fallback_decisions = sum(1 for d in all_decisions if d.fallback_used)
     total_cost = sum(d.cost_usd for d in all_decisions)
 
     return {
@@ -93,6 +98,9 @@ async def run_single_eval_mode(
         "seed": seed,
         "kpis": kpis,
         "decisions_count": len(all_decisions),
+        "fallback_decisions": fallback_decisions,
+        "deadlocks_resolved": metrics.get("deadlocks_resolved", 0),
+        "outcomes": metrics.get("outcomes", {}),
         "mean_latency_ms": float(np.mean(latencies)) if latencies else 0.0,
         "p95_latency_ms": float(np.percentile(latencies, 95)) if latencies else 0.0,
         "governance_denials": governance_denials,
@@ -148,6 +156,8 @@ async def execute_eval_ai(
         latencies = [r["mean_latency_ms"] for r in mode_runs]
         denials = sum(r["governance_denials"] for r in mode_runs)
         safety_rej = sum(r["safety_rejections"] for r in mode_runs)
+        fallbacks = sum(r.get("fallback_decisions", 0) for r in mode_runs)
+        deadlocks_res = sum(r.get("deadlocks_resolved", 0) for r in mode_runs)
         cost = sum(r["total_cost_usd"] for r in mode_runs)
 
         summary_data[m] = {
@@ -158,6 +168,8 @@ async def execute_eval_ai(
             "latency_mean_ms": float(np.mean(latencies)),
             "governance_denials_total": denials,
             "safety_rejections_total": safety_rej,
+            "fallback_decisions_total": fallbacks,
+            "deadlocks_resolved_total": deadlocks_res,
             "total_cost_usd": cost,
         }
 

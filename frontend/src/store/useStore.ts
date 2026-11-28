@@ -31,6 +31,25 @@ import {
   fetchReslotRecommendations,
 } from "../services/api";
 
+export type WorkspaceView =
+  | "overview"
+  | "2d"
+  | "3d"
+  | "split"
+  | "orders"
+  | "brain"
+  | "chaos"
+  | "replay";
+
+export interface KpiHistoryPoint {
+  tick: number;
+  throughput: number;
+  queueDepth: number;
+  utilization: number;
+  moving: number;
+  delivered: number;
+}
+
 export interface StoreState {
   connected: boolean;
   hello: HelloPayload | null;
@@ -40,6 +59,7 @@ export interface StoreState {
   orders: Record<string, Order>;
   alerts: Alert[];
   kpis: DynamicKPIs;
+  kpiHistory: KpiHistoryPoint[];
   recentEvents: Event[];
   tick: number;
   simTimeMs: number;
@@ -47,6 +67,7 @@ export interface StoreState {
   isPaused: boolean;
   speedMultiplier: number;
   theme: "dark" | "light";
+  activeWorkspaceView: WorkspaceView;
   selectedRobotId: string | null;
   focusedCoord: Coordinate | null;
   selectedOrderId: string | null;
@@ -82,6 +103,10 @@ export interface StoreState {
   // Phase 5: AI Operations Brain
   aiMode: BrainMode;
   brainProvider: BrainProvider;
+  brainConnectionState: string;
+  brainModelName: string;
+  brainInferenceInFlight: boolean;
+  deadlocksActiveCount: number;
   circuitBreakerTripped: boolean;
   decisions: Decision[];
   pendingApprovals: ApprovalRequest[];
@@ -90,6 +115,7 @@ export interface StoreState {
   isDecisionLogOpen: boolean;
   isApprovalsDrawerOpen: boolean;
   isSupervisorBarOpen: boolean;
+  isAISettingsOpen: boolean;
   // Phase 6: Chaos, Resilience, Exceptions & Audit
   isChaosControlOpen: boolean;
   isExceptionsQueueOpen: boolean;
@@ -131,6 +157,7 @@ let globalState: StoreState = {
   orders: {},
   alerts: [],
   kpis: initialKPIs,
+  kpiHistory: [],
   recentEvents: [],
   tick: 0,
   simTimeMs: 0,
@@ -138,6 +165,12 @@ let globalState: StoreState = {
   isPaused: false,
   speedMultiplier: 1.0,
   theme: (typeof localStorage !== "undefined" && (localStorage.getItem("ROBOFLEET_THEME") as any)) || "light",
+  activeWorkspaceView:
+    (typeof localStorage !== "undefined" &&
+      (["2d", "3d", "split"].includes(localStorage.getItem("ROBOFLEET_VIEW_MODE") || "")
+        ? (localStorage.getItem("ROBOFLEET_VIEW_MODE") as "2d" | "3d" | "split")
+        : "split")) ||
+    "split",
   selectedRobotId: null,
   focusedCoord: null,
   selectedOrderId: null,
@@ -155,7 +188,12 @@ let globalState: StoreState = {
     showCongestion: false,
   },
   environmentDisclosure: null,
-  viewMode: "3d",
+  viewMode:
+    (typeof localStorage !== "undefined" &&
+      (["2d", "3d", "split"].includes(localStorage.getItem("ROBOFLEET_VIEW_MODE") || "")
+        ? (localStorage.getItem("ROBOFLEET_VIEW_MODE") as "2d" | "3d" | "split")
+        : "split")) ||
+    "split",
   cameraMode: "orbit",
   lightingPreset: "daylight",
   qualityTier: "high",
@@ -170,8 +208,12 @@ let globalState: StoreState = {
     tier: "high",
   },
   // Phase 5: AI Operations Brain
-  aiMode: "ai",
+  aiMode: "heuristic",
   brainProvider: "heuristic",
+  brainConnectionState: "Heuristic Mode — Active",
+  brainModelName: "deterministic",
+  brainInferenceInFlight: false,
+  deadlocksActiveCount: 0,
   circuitBreakerTripped: false,
   decisions: [],
   pendingApprovals: [],
@@ -180,6 +222,7 @@ let globalState: StoreState = {
   isDecisionLogOpen: false,
   isApprovalsDrawerOpen: false,
   isSupervisorBarOpen: false,
+  isAISettingsOpen: false,
   // Phase 6: Chaos, Resilience, Exceptions & Audit
   isChaosControlOpen: false,
   isExceptionsQueueOpen: false,
@@ -360,9 +403,13 @@ export function useWebSocketConnection() {
     fetchBrainStatus()
       .then((st) =>
         setStore({
-          aiMode: st.mode || "ai",
-          brainProvider: st.provider || "heuristic",
-          circuitBreakerTripped: Boolean(st.circuit_breaker_tripped),
+          aiMode: (st.mode || "heuristic") as BrainMode,
+          brainProvider: (st.provider || "heuristic") as BrainProvider,
+          brainConnectionState: st.connection_state || "Heuristic Mode — Active",
+          brainModelName: st.model_name || "",
+          brainInferenceInFlight: Boolean(st.inference_in_flight),
+          deadlocksActiveCount: Number(st.deadlocks_active_count) || 0,
+          circuitBreakerTripped: Boolean(st.circuit_breaker_tripped || st.circuit_tripped),
           heldZones: st.held_zones || [],
           totalBrainCostUsd: Number(st.total_cost_usd) || 0,
         })
@@ -504,6 +551,28 @@ function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
       const rawAlerts = snap.alerts || snap.active_alerts || snap.dynamic?.alerts || snap.dynamic?.active_alerts || [];
       const listAlerts = Array.isArray(rawAlerts) ? rawAlerts.map(normalizeAlert) : [];
 
+      const snapTick = Number(snap.tick ?? snap.dynamic?.tick ?? tick ?? 0);
+      const snapKpis = snap.kpis || snap.dynamic?.kpis || initialKPIs;
+      let nextKpiHistory = globalState.kpiHistory;
+      if (snapTick === 0 || snapTick < globalState.tick) {
+        nextKpiHistory = [];
+      } else if (
+        nextKpiHistory.length === 0 ||
+        snapTick > nextKpiHistory[nextKpiHistory.length - 1].tick
+      ) {
+        nextKpiHistory = [
+          ...nextKpiHistory,
+          {
+            tick: snapTick,
+            throughput: Number(snapKpis.throughput_orders_per_hr) || 0,
+            queueDepth: Number(snapKpis.queue_depth) || 0,
+            utilization: Number(snapKpis.fleet_utilization) || 0,
+            moving: Number(snapKpis.robots_moving) || 0,
+            delivered: Number(snapKpis.completed_orders_total) || 0,
+          },
+        ].slice(-120);
+      }
+
       setStore({
         snapshot: snap,
         staticWorld: snap.layout
@@ -517,9 +586,10 @@ function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
         robots: robotsMap,
         orders: ordersMap,
         alerts: listAlerts,
-        kpis: snap.kpis || snap.dynamic?.kpis || initialKPIs,
+        kpis: snapKpis,
+        kpiHistory: nextKpiHistory,
         recentEvents: snap.recent_events || snap.dynamic?.recent_events || snap.events || [],
-        tick: snap.tick ?? snap.dynamic?.tick ?? tick,
+        tick: snapTick,
         simTimeMs: snap.sim_time_ms ?? snap.dynamic?.sim_time_ms ?? 0,
         lastSeq: seq,
       });
@@ -560,12 +630,35 @@ function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
             nextDecisions = [rec, ...prev.decisions].slice(0, 100);
           }
         }
+        if (Array.isArray(payload.decision_updates) && payload.decision_updates.length > 0) {
+          const updatesMap = new Map<string, Decision>(
+            payload.decision_updates.map((u: Decision) => [u.decision_id, u])
+          );
+          nextDecisions = nextDecisions.map((d) => updatesMap.get(d.decision_id) ?? d);
+        }
 
         const brainStatus = payload.brain_status;
         const nextAiMode = brainStatus ? (brainStatus.ai_mode as BrainMode) : prev.aiMode;
         const nextProvider = brainStatus
           ? (brainStatus.provider_status as BrainProvider)
           : prev.brainProvider;
+        const nextConnState = brainStatus?.connection_state ?? prev.brainConnectionState;
+        const nextModelName = brainStatus?.model_name ?? prev.brainModelName;
+        const nextInFlight =
+          brainStatus?.inference_in_flight !== undefined
+            ? Boolean(brainStatus.inference_in_flight)
+            : prev.brainInferenceInFlight;
+        const nextDeadlocksCount =
+          brainStatus?.deadlocks_active_count !== undefined
+            ? Number(brainStatus.deadlocks_active_count)
+            : prev.deadlocksActiveCount;
+        const nextHeldZones = Array.isArray(brainStatus?.held_zones)
+          ? brainStatus.held_zones
+          : prev.heldZones;
+        const nextCircuit =
+          brainStatus?.circuit_tripped !== undefined
+            ? Boolean(brainStatus.circuit_tripped)
+            : prev.circuitBreakerTripped;
         const nextApprovals =
           payload.pending_approvals !== undefined
             ? payload.pending_approvals
@@ -589,23 +682,55 @@ function handleEnvelope(ws: WebSocket, envelope: WsEnvelope) {
             ? payload.reslot_recommendations
             : prev.reslotRecommendations;
 
+        const nextTick = Number(payload.tick ?? tick ?? prev.tick);
+        const nextKpis = payload.kpis || prev.kpis;
+        let nextKpiHistory = prev.kpiHistory;
+        if (nextTick < prev.tick || (nextTick === 0 && prev.tick > 0)) {
+          nextKpiHistory = [];
+        } else if (nextTick > prev.tick) {
+          const lastRecordedTick =
+            prev.kpiHistory.length > 0
+              ? prev.kpiHistory[prev.kpiHistory.length - 1].tick
+              : -1;
+          if (nextTick > lastRecordedTick) {
+            nextKpiHistory = [
+              ...prev.kpiHistory,
+              {
+                tick: nextTick,
+                throughput: Number(nextKpis.throughput_orders_per_hr) || 0,
+                queueDepth: Number(nextKpis.queue_depth) || 0,
+                utilization: Number(nextKpis.fleet_utilization) || 0,
+                moving: Number(nextKpis.robots_moving) || 0,
+                delivered: Number(nextKpis.completed_orders_total) || 0,
+              },
+            ].slice(-120);
+          }
+        }
+
         return {
           ...prev,
           robots: nextRobots,
           orders: nextOrders,
           alerts: nextAlerts,
-          kpis: payload.kpis || prev.kpis,
+          kpis: nextKpis,
+          kpiHistory: nextKpiHistory,
           recentEvents: nextEvents,
           decisions: nextDecisions,
           aiMode: nextAiMode,
           brainProvider: nextProvider,
+          brainConnectionState: nextConnState,
+          brainModelName: nextModelName,
+          brainInferenceInFlight: nextInFlight,
+          deadlocksActiveCount: nextDeadlocksCount,
+          circuitBreakerTripped: nextCircuit,
+          heldZones: nextHeldZones,
           pendingApprovals: nextApprovals,
           totalBrainCostUsd: nextCost,
           degradedModes: nextDegraded,
           activeFaultsCount: nextActiveFaultsCount,
           pendingExceptions: nextExceptions,
           reslotRecommendations: nextReslot,
-          tick: payload.tick ?? tick,
+          tick: nextTick,
           simTimeMs:
             payload.sim_time_ms !== undefined
               ? Number(payload.sim_time_ms)

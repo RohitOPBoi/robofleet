@@ -40,21 +40,22 @@ export const Scene3D: React.FC = () => {
 
   if (!hasWebGL) {
     return (
-      <div className="flex-1 h-full w-full flex flex-col items-center justify-center bg-gray-950 p-6 text-center select-none">
-        <div className="p-4 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mb-3">
-          <AlertCircle className="w-8 h-8" />
+      <div className="flex-1 h-full w-full flex flex-col items-center justify-center bg-[var(--studio-canvas)] p-6 text-center select-none">
+        <div className="p-4 rounded-2xl bg-amber-600/12 border border-amber-700/25 text-[#B4691E] dark:text-amber-300 mb-3">
+          <AlertCircle className="w-8 h-8" strokeWidth={1.5} />
         </div>
-        <h3 className="text-base font-bold text-white mb-1">WebGL2 Acceleration Unavailable</h3>
-        <p className="text-xs text-gray-400 max-w-sm mb-4 leading-relaxed">
-          Your browser or graphics environment does not support WebGL2 hardware acceleration.
-          RoboFleet has safely preserved your session.
+        <h3 className="text-base font-semibold text-[var(--studio-text-primary)] mb-1">
+          WebGL2 acceleration unavailable
+        </h3>
+        <p className="text-xs text-[var(--studio-text-secondary)] max-w-sm mb-4 leading-relaxed">
+          Your browser environment does not support WebGL2 hardware acceleration. Switch cleanly to the 2D tactical canvas without interrupting the simulation.
         </p>
         <button
           type="button"
-          onClick={() => setStore({ viewMode: "2d" })}
-          className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black font-bold text-xs transition cursor-pointer"
+          onClick={() => setStore({ viewMode: "2d", activeWorkspaceView: "2d" })}
+          className="studio-btn px-4 py-2 rounded-xl bg-studio-terracotta hover:bg-studio-vermilion text-white font-semibold text-xs cursor-pointer"
         >
-          Switch to 2D Live Map
+          Switch to 2D tactical map
         </button>
       </div>
     );

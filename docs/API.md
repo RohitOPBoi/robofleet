@@ -65,3 +65,19 @@ All state-modifying endpoints require Bearer authentication via header `Authoriz
 - `POST /api/control/block_cells`: Dynamically marks grid cells as obstructed. Payload: `{"cells": [{"x": 10, "y": 8}]}`.
 - `POST /api/control/unblock_cells`: Unblocks specified grid cells.
 - `POST /api/ingest/orders`: Ingests an external order through the webhook adapter with idempotency and rate limiting.
+
+### 3.3 AI Mode, Local LLM Mode & Governance Endpoints
+- `GET /api/brain/status`: Returns active operating mode (`baseline`, `heuristic`, `ai`, `local_llm`, `replay`), connection/inference status, active model name, fallback attribution, deadlock count, operational metrics, and non-secret Cloud/Local summaries (never raw API keys).
+- `GET /api/brain/config`: Returns supported provider presets (`OpenAI`, `OpenRouter`, `Groq`, `Together AI`, `Fireworks AI`, `DeepSeek`, `Anthropic`, `Custom`), safe active Cloud AI & Local LLM settings, and masked key indicators.
+- `GET /api/brain/metrics`: Returns fallback rate, stale/invalid counts, latency, cost, deadlocks resolved, and measured outcome counts.
+- `GET /api/brain/decisions`: Returns recent `Decision` records including `operating_mode`, `provider_mode`, `fallback_used`, `attribution`, `traffic_plan`, and `observed_outcome`.
+- `GET /api/brain/approvals`: Lists pending human-in-the-loop approval requests.
+- `GET /api/brain/local/status`: Probes local Ollama (`/api/tags`), installed models, and checks whether recommended model `qwen3.5:4b` is available.
+- `POST /api/brain/mode` (Bearer): Enables/disables the Brain orchestrator (`baseline` vs active operating mode).
+- `POST /api/brain/provider` (Bearer): Switches operating mode (`heuristic`, `ai`, `local_llm`, `replay`, `baseline`).
+- `POST /api/brain/ai/config` (Bearer): Updates Cloud AI preset, compatibility (`openai_chat`, `openai_responses`, `anthropic_messages`), base URL, model, parameters, or in-memory API key (`clear_api_key` supported).
+- `POST /api/brain/ai/test` (Bearer): Verifies Cloud AI endpoint reachability, credentials, and available models.
+- `POST /api/brain/local/config` (Bearer): Updates Ollama base URL, model tag (`qwen3.5:4b` default), context window, timeout, temperature, max tokens, and fallback policy.
+- `POST /api/brain/local/test` (Bearer): Tests Ollama daemon connectivity and selected local model readiness.
+- `POST /api/brain/approvals/{request_id}` (Bearer): Approves or rejects a pending governed action.
+- `POST /api/brain/supervisor/command` (Bearer): Parses natural-language supervisor queries or commands with prompt-injection defense.

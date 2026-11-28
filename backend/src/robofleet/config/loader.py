@@ -94,9 +94,16 @@ def load_config(
             _set_deep(raw_data, flat_k.split("."), v)
             tracker.record(flat_k, f"scenario ({s_path.name})")
 
-    # 3. Environment Variables Layer
+    # 3. Environment Variables Layer (skip secret credential vars handled out-of-band)
+    secret_env_vars = {
+        f"{env_prefix}TOKEN",
+        f"{env_prefix}AI_API_KEY",
+        f"{env_prefix}API_KEY",
+        f"{env_prefix}ANTHROPIC_API_KEY",
+        f"{env_prefix}OPENAI_API_KEY",
+    }
     for env_k, env_v in os.environ.items():
-        if env_k.startswith(env_prefix):
+        if env_k.startswith(env_prefix) and env_k not in secret_env_vars:
             # Example ROBOFLEET_ROBOT_COUNT -> robot_count
             # ROBOFLEET_TIMING__TICK_HZ -> timing.tick_hz
             tail = env_k[len(env_prefix) :].lower()

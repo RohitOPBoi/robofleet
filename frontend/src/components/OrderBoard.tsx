@@ -2,14 +2,14 @@ import React, { useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Clock,
+  Layers,
   Package,
   Search,
   Truck,
-  ChevronDown,
-  ChevronUp,
-  Cpu,
-  Layers,
+  X,
 } from "lucide-react";
 import { setStore, useStore } from "../store/useStore";
 import type { OrderStatus } from "../types/generated";
@@ -18,29 +18,34 @@ const getStatusBadgeStyle = (status: OrderStatus) => {
   switch (status) {
     case "RECEIVED":
     case "QUEUED":
-      return "bg-gray-800 text-gray-300 border-gray-700";
+      return "bg-stone-900/[0.06] text-[var(--studio-text-secondary)] border-[var(--studio-border-strong)] dark:bg-white/[0.08]";
     case "PLANNED":
-      return "bg-blue-950/80 text-blue-300 border-blue-800";
+      return "bg-amber-900/[0.08] text-[#58473D] border-stone-500/25 dark:bg-white/[0.09] dark:text-[#D3C3B8] dark:border-white/15";
     case "RETRIEVING":
-      return "bg-cyan-950/80 text-cyan-300 border-cyan-800 animate-pulse";
+      return "bg-[#E87454]/14 text-[#A9351F] border-[#D9533B]/30 dark:bg-[#E87454]/18 dark:text-[#FFA991] dark:border-[#E87454]/35";
     case "AT_STATION":
     case "PICKING":
-      return "bg-amber-950/80 text-amber-300 border-amber-800";
+      return "bg-amber-600/12 text-[#8F4F0D] border-amber-700/25 dark:bg-amber-500/16 dark:text-amber-300 dark:border-amber-500/35";
     case "CONSOLIDATING":
-      return "bg-indigo-950/80 text-indigo-300 border-indigo-800";
+      return "bg-orange-600/12 text-[#9A4318] border-orange-700/25 dark:bg-orange-500/16 dark:text-orange-300 dark:border-orange-500/35";
     case "PACKED":
     case "READY_FOR_DISPATCH":
-      return "bg-amber-950/80 text-amber-300 border-amber-800 animate-pulse";
+      return "bg-[#D9533B]/14 text-[#A53420] border-[#D9533B]/30 dark:bg-[#D9533B]/20 dark:text-[#FF9D8A] dark:border-[#D9533B]/40";
     case "HANDED_OVER":
-      return "bg-emerald-950/90 text-emerald-300 border-emerald-600 font-bold";
+      return "bg-emerald-600/12 text-[#1D6144] border-emerald-700/25 dark:bg-emerald-500/18 dark:text-emerald-300 dark:border-emerald-500/35 font-semibold";
     case "FAILED_PARTIAL":
     case "FAILED":
-      return "bg-red-950/80 text-red-300 border-red-800";
+      return "bg-red-600/12 text-[#9E2418] border-red-700/25 dark:bg-red-500/18 dark:text-red-300 dark:border-red-500/35";
     case "CANCELLED":
-      return "bg-zinc-900 text-zinc-500 border-zinc-800";
+      return "bg-stone-900/[0.04] text-[var(--studio-text-muted)] border-[var(--studio-border)] dark:bg-white/[0.04]";
     default:
-      return "bg-gray-800 text-gray-400 border-gray-700";
+      return "bg-stone-900/[0.05] text-[var(--studio-text-secondary)] border-[var(--studio-border)]";
   }
+};
+
+const formatOrderStatus = (status: OrderStatus): string => {
+  const words = status.toLowerCase().split("_");
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 };
 
 const LIFECYCLE_STAGES: OrderStatus[] = [
@@ -119,57 +124,73 @@ export const OrderBoard: React.FC = () => {
   );
 
   return (
-    <div className="w-full h-full flex flex-col text-xs select-none overflow-hidden bg-gray-950/90">
+    <div className="w-full h-full flex flex-col text-xs overflow-hidden bg-[var(--studio-surface)] text-[var(--studio-text-primary)]">
       {/* Board Header */}
-      <div className="p-3 border-b border-gray-800 bg-gray-950/60 shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5 font-semibold text-white text-xs">
-            <Package className="w-3.5 h-3.5 text-blue-400" />
-            <span>Fulfillment Order Journey</span>
+      <div className="p-3 border-b border-[var(--studio-border)] bg-[var(--studio-surface-subtle)] shrink-0 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 font-semibold text-[var(--studio-text-primary)] text-[13px] tracking-tight">
+            <Package className="w-4 h-4 text-[#A53420] dark:text-studio-coral shrink-0" strokeWidth={1.5} />
+            <span>Fulfillment order journey</span>
           </div>
-          <span className="font-mono text-gray-400 text-[11px]">{filteredOrders.length} orders</span>
+          <span className="font-mono text-[var(--studio-text-muted)] text-[11px] tabular-nums">
+            {filteredOrders.length} orders
+          </span>
         </div>
 
         {/* Search */}
-        <div className="relative mb-2">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-gray-500" />
+        <div className="relative">
+          <Search
+            className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--studio-text-muted)] pointer-events-none"
+            strokeWidth={1.5}
+          />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search ID, tote, or tier..."
-            className="w-full bg-gray-900 border border-gray-800 rounded-md pl-8 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+            placeholder="Search ID, tote, or tier"
+            aria-label="Search orders"
+            className="w-full bg-[var(--studio-surface-elevated)] border border-[var(--studio-border-strong)] rounded-xl pl-8 pr-8 py-1.5 text-xs text-[var(--studio-text-primary)] placeholder:text-[var(--studio-text-muted)] focus:outline-none focus:border-studio-terracotta transition-[border-color,background-color] duration-200"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)] hover:bg-stone-900/[0.06] dark:hover:bg-white/10 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          )}
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex bg-gray-900 p-0.5 rounded-lg border border-gray-800 font-medium text-[11px]">
+        <div className="grid grid-cols-4 gap-1 bg-[var(--studio-surface-subtle)] p-1 rounded-xl border border-[var(--studio-border)] font-medium text-[11px]">
           <button
             type="button"
             onClick={() => setActiveTab("active")}
-            className={`flex-1 py-1 rounded text-center transition flex items-center justify-center gap-1 cursor-pointer ${
+            className={`py-1 px-1.5 rounded-lg text-center flex items-center justify-center gap-1 cursor-pointer transition-colors duration-150 ${
               activeTab === "active"
-                ? "bg-gray-800 text-white font-semibold shadow-sm"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-[var(--studio-surface-elevated)] text-[var(--studio-text-primary)] font-semibold shadow-sm"
+                : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
             <span>Active</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-gray-700 text-gray-300 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded-full bg-stone-900/[0.08] dark:bg-white/10 text-[var(--studio-text-secondary)] text-[10px] leading-none tabular-nums">
               {activeCount}
             </span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("completed")}
-            className={`flex-1 py-1 rounded text-center transition flex items-center justify-center gap-1 cursor-pointer ${
+            className={`py-1 px-1.5 rounded-lg text-center flex items-center justify-center gap-1 cursor-pointer transition-colors duration-150 ${
               activeTab === "completed"
-                ? "bg-green-950 text-green-300 font-semibold shadow-sm"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-emerald-600/12 dark:bg-emerald-500/20 text-[#1D6144] dark:text-emerald-300 font-semibold shadow-sm"
+                : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
             <span>Done</span>
             {completedCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-green-800/80 text-white text-[10px]">
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-700/15 dark:bg-emerald-500/25 text-[#1D6144] dark:text-emerald-200 text-[10px] leading-none tabular-nums">
                 {completedCount}
               </span>
             )}
@@ -177,15 +198,15 @@ export const OrderBoard: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab("at_risk")}
-            className={`flex-1 py-1 rounded text-center transition flex items-center justify-center gap-1 cursor-pointer ${
+            className={`py-1 px-1.5 rounded-lg text-center flex items-center justify-center gap-1 cursor-pointer transition-colors duration-150 ${
               activeTab === "at_risk"
-                ? "bg-red-950 text-red-300 font-semibold shadow-sm"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-red-600/12 dark:bg-red-500/20 text-[#9E2418] dark:text-red-300 font-semibold shadow-sm"
+                : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
             <span>At risk</span>
             {atRiskCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-red-800 text-white text-[10px]">
+              <span className="px-1.5 py-0.5 rounded-full bg-red-700/15 dark:bg-red-500/25 text-[#9E2418] dark:text-red-200 text-[10px] leading-none tabular-nums">
                 {atRiskCount}
               </span>
             )}
@@ -193,10 +214,10 @@ export const OrderBoard: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab("all")}
-            className={`flex-1 py-1 rounded text-center transition cursor-pointer ${
+            className={`py-1 px-1.5 rounded-lg text-center cursor-pointer transition-colors duration-150 ${
               activeTab === "all"
-                ? "bg-gray-800 text-white font-semibold shadow-sm"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-[var(--studio-surface-elevated)] text-[var(--studio-text-primary)] font-semibold shadow-sm"
+                : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
             }`}
           >
             All
@@ -205,12 +226,19 @@ export const OrderBoard: React.FC = () => {
       </div>
 
       {/* Orders List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2 min-h-0">
         {filteredOrders.length === 0 ? (
-          <div className="h-40 flex flex-col items-center justify-center text-gray-500 text-center px-4">
-            <CheckCircle className="w-6 h-6 text-gray-600 mb-1" />
-            <p className="font-medium text-gray-400 text-xs">No matching orders</p>
-            <p className="text-[10px] text-gray-500">Orders will appear as fulfillment progresses.</p>
+          <div className="h-40 flex flex-col items-center justify-center text-center px-4">
+            <CheckCircle
+              className="w-6 h-6 text-[var(--studio-text-muted)] mb-2"
+              strokeWidth={1.5}
+            />
+            <p className="font-medium text-[var(--studio-text-secondary)] text-xs">
+              No matching orders
+            </p>
+            <p className="text-[11px] text-[var(--studio-text-muted)] mt-0.5">
+              Orders will appear as fulfillment progresses.
+            </p>
           </div>
         ) : (
           filteredOrders.map((order) => {
@@ -219,107 +247,127 @@ export const OrderBoard: React.FC = () => {
             const remainingSecs = Math.max(0, Math.floor(remainingTicks / 10));
             const mins = Math.floor(remainingSecs / 60);
             const secs = remainingSecs % 60;
-            const countdownStr = remainingTicks > 0 ? `${mins}m ${String(secs).padStart(2, "0")}s` : "EXPIRED";
+            const countdownStr =
+              remainingTicks > 0 ? `${mins}m ${String(secs).padStart(2, "0")}s` : "Expired";
 
             const totalDurationTicks = Math.max(1, order.deadline_tick - order.received_tick);
-            const progressFraction = Math.max(0, Math.min(1, remainingTicks / totalDurationTicks));
+            const progressFraction = Math.max(
+              0,
+              Math.min(1, remainingTicks / totalDurationTicks)
+            );
             const currentStageIdx = getStageIndex(order.status);
             const da = order.delay_attribution;
 
             return (
               <div
                 key={order.id}
-                className={`p-2.5 rounded-lg border transition select-none ${
+                className={`p-3 rounded-xl border transition-[border-color,background-color,box-shadow] duration-200 ${
                   isSelected
-                    ? "bg-blue-950/40 border-blue-600 shadow-md ring-1 ring-blue-500/30"
+                    ? "bg-[var(--studio-surface-elevated)] border-studio-terracotta ring-1 ring-studio-terracotta/25 shadow-sm"
                     : order.at_risk
-                    ? "bg-red-950/20 border-red-800/70 hover:border-red-600"
-                    : "bg-gray-950/60 border-gray-800 hover:border-gray-700"
+                      ? "bg-red-50/75 dark:bg-red-950/25 border-red-700/25 dark:border-red-500/35 hover:border-red-700/45"
+                      : "bg-[var(--studio-surface-elevated)] border-[var(--studio-border)] hover:border-[var(--studio-border-strong)]"
                 }`}
               >
                 {/* Order Top Line */}
-                <div
-                  className="flex items-center justify-between cursor-pointer"
+                <button
+                  type="button"
+                  aria-expanded={isSelected}
+                  className="w-full text-left flex items-center justify-between gap-2 cursor-pointer rounded-lg"
                   onClick={() => setStore({ selectedOrderId: isSelected ? null : order.id })}
                 >
-                  <div className="flex items-center gap-1.5 font-mono font-semibold text-gray-200 text-xs">
-                    <span>{order.id}</span>
+                  <div className="flex items-center gap-1.5 font-mono font-semibold text-[var(--studio-text-primary)] text-xs min-w-0">
+                    <span className="truncate tabular-nums">{order.id}</span>
                     {order.tote_id && (
-                      <span className="px-1 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800 text-[10px] font-mono">
+                      <span className="px-1.5 py-0.5 rounded-md bg-stone-900/[0.06] dark:bg-white/[0.08] text-[var(--studio-text-secondary)] border border-[var(--studio-border)] text-[10px] font-mono tabular-nums shrink-0">
                         {order.tote_id}
                       </span>
                     )}
                     {order.at_risk && (
-                      <span className="flex items-center gap-0.5 px-1 py-0.2 rounded bg-red-950 text-red-400 border border-red-800 text-[10px] font-bold">
-                        <AlertCircle className="w-2.5 h-2.5" />
-                        AT RISK
+                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-600/12 dark:bg-red-500/20 text-[#9E2418] dark:text-red-300 border border-red-700/25 dark:border-red-500/35 text-[10px] font-semibold shrink-0">
+                        <AlertCircle className="w-3 h-3" strokeWidth={1.5} />
+                        <span>At risk</span>
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border flex items-center gap-1 ${getStatusBadgeStyle(
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-medium border flex items-center gap-1 ${getStatusBadgeStyle(
                         order.status
                       )}`}
                     >
                       {order.status === "HANDED_OVER" ? (
                         <>
-                          <Truck className="w-3 h-3 text-emerald-400" />
-                          <span>DONE / DELIVERED</span>
+                          <Truck
+                            className="w-3 h-3 text-[#1D6144] dark:text-emerald-300"
+                            strokeWidth={1.5}
+                          />
+                          <span>Delivered</span>
                         </>
                       ) : (
-                        order.status.replace("_", " ")
+                        formatOrderStatus(order.status)
                       )}
                     </span>
                     {isSelected ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                      <ChevronUp
+                        className="w-3.5 h-3.5 text-[var(--studio-text-secondary)]"
+                        strokeWidth={1.5}
+                      />
                     ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                      <ChevronDown
+                        className="w-3.5 h-3.5 text-[var(--studio-text-muted)]"
+                        strokeWidth={1.5}
+                      />
                     )}
                   </div>
-                </div>
+                </button>
 
                 {/* SLA Deadline Bar */}
                 {order.status !== "HANDED_OVER" && order.status !== "CANCELLED" && (
-                  <div className="mt-2 mb-1">
-                    <div className="flex justify-between items-center text-[10px] text-gray-400 mb-0.5">
+                  <div className="mt-2.5 mb-1.5">
+                    <div className="flex justify-between items-center text-[10.5px] text-[var(--studio-text-secondary)] mb-1">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> SLA deadline:
+                        <Clock className="w-3 h-3 text-[var(--studio-text-muted)]" strokeWidth={1.5} />
+                        <span>SLA deadline</span>
                       </span>
                       <span
-                        className={`font-mono font-semibold ${
-                          order.at_risk || remainingTicks <= 0 ? "text-red-400" : "text-gray-300"
+                        className={`font-mono font-semibold tabular-nums ${
+                          order.at_risk || remainingTicks <= 0
+                            ? "text-[#9E2418] dark:text-red-300"
+                            : "text-[var(--studio-text-primary)]"
                         }`}
                       >
                         {countdownStr}
                       </span>
                     </div>
-                    <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-stone-900/10 dark:bg-white/10 rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-300 ${
-                          order.at_risk || remainingTicks <= 0 ? "bg-red-500" : "bg-blue-500"
+                        className={`w-full h-full rounded-full origin-left transform transition-transform duration-300 ease-[var(--ease-out)] ${
+                          order.at_risk || remainingTicks <= 0
+                            ? "bg-[#B93829] dark:bg-red-500"
+                            : "bg-[var(--studio-accent-solid)]"
                         }`}
-                        style={{ width: `${progressFraction * 100}%` }}
+                        style={{ transform: `scaleX(${progressFraction})` }}
                       />
                     </div>
                   </div>
                 )}
 
                 {/* Multi-step Journey Progress Pills */}
-                <div className="mt-2 grid grid-cols-7 gap-0.5 text-center">
+                <div className="mt-2 grid grid-cols-7 gap-1 text-center">
                   {LIFECYCLE_STAGES.map((st, idx) => {
                     const isDone = currentStageIdx >= idx;
                     const isCurr = currentStageIdx === idx;
                     return (
                       <div
                         key={st}
-                        title={st}
-                        className={`h-1.5 rounded-sm transition-all ${
+                        title={formatOrderStatus(st)}
+                        className={`h-1.5 rounded-full transition-colors duration-200 ${
                           isCurr
-                            ? "bg-amber-400 ring-1 ring-amber-300"
+                            ? "bg-[var(--studio-accent-solid)] ring-1 ring-studio-terracotta/35"
                             : isDone
-                            ? "bg-blue-500"
-                            : "bg-gray-800"
+                              ? "bg-[#2E7D5B] dark:bg-emerald-500/80"
+                              : "bg-stone-900/10 dark:bg-white/10"
                         }`}
                       />
                     );
@@ -327,62 +375,101 @@ export const OrderBoard: React.FC = () => {
                 </div>
 
                 {/* SKU count & Tier */}
-                <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1.5 mt-1 border-t border-gray-900">
-                  <span className="flex items-center gap-1">
-                    <Layers className="w-2.5 h-2.5 text-gray-400" />
-                    {order.lines?.length || 0} items
+                <div className="flex items-center justify-between text-[10.5px] text-[var(--studio-text-muted)] pt-2 mt-2 border-t border-[var(--studio-border)]">
+                  <span className="flex items-center gap-1 tabular-nums min-w-0 truncate">
+                    <Layers className="w-3 h-3 text-[var(--studio-text-muted)] shrink-0" strokeWidth={1.5} />
+                    <span>{order.lines?.length || 0} items</span>
                     {order.assigned_robot_ids && order.assigned_robot_ids.length > 0 && (
-                      <span className="ml-1 text-gray-400">
-                        • {order.assigned_robot_ids.join(", ")}
+                      <span className="ml-1 text-[var(--studio-text-secondary)] truncate font-mono">
+                        · {order.assigned_robot_ids.join(", ")}
                       </span>
                     )}
                   </span>
                   <span
-                    className={`font-mono font-semibold uppercase text-[10px] ${
-                      order.sla_tier === "express" ? "text-purple-400" : "text-gray-400"
+                    className={`font-mono font-medium text-[10.5px] shrink-0 ${
+                      order.sla_tier === "express"
+                        ? "text-[#A53420] dark:text-studio-coral"
+                        : "text-[var(--studio-text-secondary)]"
                     }`}
                   >
-                    {order.sla_tier}
+                    {order.sla_tier.charAt(0).toUpperCase() + order.sla_tier.slice(1)}
                   </span>
                 </div>
 
                 {/* Expandable Journey & Delay Attribution Drawer */}
                 {isSelected && (
-                  <div className="mt-2 pt-2 border-t border-gray-800/80 space-y-2 text-[11px] text-gray-300">
+                  <div className="mt-2.5 pt-2.5 border-t border-[var(--studio-border)] space-y-2.5 text-[11px] text-[var(--studio-text-secondary)]">
                     {/* Line Items Details */}
                     <div>
-                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Package className="w-2.5 h-2.5" /> Order Lines:
+                      <div className="text-[11px] font-medium text-[var(--studio-text-secondary)] mb-1 flex items-center gap-1.5">
+                        <Package className="w-3 h-3 text-[var(--studio-text-muted)]" strokeWidth={1.5} />
+                        <span>Order lines</span>
                       </div>
-                      <div className="space-y-1 bg-gray-900/80 p-2 rounded border border-gray-800 font-mono text-[10px]">
-                        {order.lines.map((l, i) => (
-                          <div key={i} className="flex justify-between items-center">
-                            <span className="text-gray-300">{l.sku_id}</span>
-                            <span className="text-gray-400">
-                              Qty: <strong className="text-white">{l.picked_quantity}</strong> / {l.quantity}
+                      <div className="space-y-1 bg-[var(--studio-surface-subtle)] p-2 rounded-lg border border-[var(--studio-border)] font-mono text-[10.5px]">
+                        {order.lines.map((l) => (
+                          <div key={l.sku_id} className="flex justify-between items-center gap-2">
+                            <span className="text-[var(--studio-text-primary)] truncate">{l.sku_id}</span>
+                            <span className="text-[var(--studio-text-muted)] tabular-nums shrink-0">
+                              Qty:{" "}
+                              <strong className="text-[var(--studio-text-primary)] font-semibold">
+                                {l.picked_quantity}
+                              </strong>{" "}
+                              / {l.quantity}
                             </span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* WareMax Delay Attribution (P3-A8) */}
+                    {/* Delay Attribution */}
                     {da && da.total_lateness_ticks > 0 && (
-                      <div className="bg-red-950/30 p-2 rounded border border-red-900/60">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-red-300 mb-1">
-                          <span className="flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3 text-red-400" />
-                            Delay Attribution
+                      <div className="bg-red-600/[0.07] dark:bg-red-950/35 p-2.5 rounded-lg border border-red-700/20 dark:border-red-500/35">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-[#9E2418] dark:text-red-300 mb-1.5">
+                          <span className="flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
+                            <span>Delay attribution</span>
                           </span>
-                          <span>+{(da.total_lateness_ticks / 10).toFixed(1)}s late</span>
+                          <span className="font-mono tabular-nums">
+                            +{(da.total_lateness_ticks / 10).toFixed(1)}s late
+                          </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-gray-400">
-                          <div>Wait for AMR: <span className="text-gray-200">{(da.waiting_for_robot_ticks / 10).toFixed(1)}s</span></div>
-                          <div>AMR Travel: <span className="text-gray-200">{(da.travel_ticks / 10).toFixed(1)}s</span></div>
-                          <div>Station Queue: <span className="text-gray-200">{(da.station_queue_ticks / 10).toFixed(1)}s</span></div>
-                          <div>Station Pick: <span className="text-gray-200">{(da.picking_ticks / 10).toFixed(1)}s</span></div>
-                          <div>Consolidation: <span className="text-gray-200">{(da.consolidation_ticks / 10).toFixed(1)}s</span></div>
-                          <div>Supervisor Bay: <span className="text-gray-200">{(da.supervisor_handoff_ticks / 10).toFixed(1)}s</span></div>
+                        <div className="grid grid-cols-2 gap-1.5 text-[10.5px] font-mono text-[var(--studio-text-secondary)] tabular-nums">
+                          <div>
+                            Wait for AMR:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.waiting_for_robot_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div>
+                            AMR travel:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.travel_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div>
+                            Station queue:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.station_queue_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div>
+                            Station pick:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.picking_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div>
+                            Consolidation:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.consolidation_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div>
+                            Supervisor bay:{" "}
+                            <span className="text-[var(--studio-text-primary)] font-medium">
+                              {(da.supervisor_handoff_ticks / 10).toFixed(1)}s
+                            </span>
+                          </div>
                         </div>
                       </div>
                     )}

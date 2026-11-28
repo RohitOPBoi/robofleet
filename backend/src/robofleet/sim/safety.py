@@ -37,6 +37,7 @@ class SafetyGuard:
         self.e_stop_robots: set[str] = set()
         self.e_stop_zones: set[str] = set()
         self.blocked_cells: set[tuple[int, int]] = set()
+        self.recent_conflicts: list[Coordinate] = []
 
     def set_emergency_stop(self, scope: str = "all", target_id: str | None = None) -> None:
         if scope == "all":
@@ -179,11 +180,13 @@ class SafetyGuard:
             occupant = current_occupied_cells.get(target_tuple)
             if occupant is not None and occupant != r_id:
                 denials.append({"robot_id": r_id, "reason": "DESTINATION_CURRENTLY_OCCUPIED"})
+                self.recent_conflicts.append(intent.to_cell)
                 continue
 
             # Check if target cell is already reserved by another mover this tick
             if target_tuple in reserved_target_cells:
                 denials.append({"robot_id": r_id, "reason": "DESTINATION_ALREADY_RESERVED"})
+                self.recent_conflicts.append(intent.to_cell)
                 continue
 
             # Approved to move: reserve target
@@ -231,6 +234,8 @@ class SafetyGuard:
                 r.blocked_ticks = 0
 
         # Post-condition self-check: verify 0 shared cells across all robots
+        if len(self.recent_conflicts) > 20:
+            self.recent_conflicts = self.recent_conflicts[-20:]
         cells_occupied = [r.cell.as_tuple() for r in robots]
         if len(cells_occupied) != len(set(cells_occupied)):
             raise SafetyViolation(

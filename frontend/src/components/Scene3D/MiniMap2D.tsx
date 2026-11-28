@@ -7,6 +7,7 @@
 import React, { useEffect, useRef } from "react";
 import { Layers, X } from "lucide-react";
 import { setStore, useStore } from "../../store/useStore";
+import type { Robot } from "../../types/generated";
 
 const getPos = (obj: any): { x: number; y: number } => {
   if (!obj) return { x: 0, y: 0 };
@@ -15,9 +16,20 @@ const getPos = (obj: any): { x: number; y: number } => {
   return { x: Number(obj.x) || 0, y: Number(obj.y) || 0 };
 };
 
+function getInterpolatedCoord(r: Robot): { rx: number; ry: number } {
+  let rx = r.coord?.x ?? 0;
+  let ry = r.coord?.y ?? 0;
+  if (r.motion?.from_coord && r.motion?.to_coord) {
+    const prog = Math.max(0, Math.min(1, r.motion.progress ?? 0));
+    rx = r.motion.from_coord.x + (r.motion.to_coord.x - r.motion.from_coord.x) * prog;
+    ry = r.motion.from_coord.y + (r.motion.to_coord.y - r.motion.from_coord.y) * prog;
+  }
+  return { rx, ry };
+}
+
 export const MiniMap2D: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { staticWorld, robots, alerts, selectedRobotId, showMiniMap } = useStore();
+  const { staticWorld, robots, alerts, selectedRobotId, showMiniMap, theme } = useStore();
 
   const layout = staticWorld?.layout;
   const storeWidth = layout?.width ?? 28;
@@ -28,6 +40,32 @@ export const MiniMap2D: React.FC = () => {
   const mapHeight = Math.round((mapWidth * storeHeight) / storeWidth);
   const scale = mapWidth / storeWidth;
 
+  const renderStateRef = useRef({
+    layout,
+    robots,
+    alerts,
+    selectedRobotId,
+    storeWidth,
+    storeHeight,
+    scale,
+    mapWidth,
+    mapHeight,
+    theme,
+  });
+
+  renderStateRef.current = {
+    layout,
+    robots,
+    alerts,
+    selectedRobotId,
+    storeWidth,
+    storeHeight,
+    scale,
+    mapWidth,
+    mapHeight,
+    theme,
+  };
+
   useEffect(() => {
     if (!showMiniMap) return;
     const canvas = canvasRef.current;
@@ -35,136 +73,181 @@ export const MiniMap2D: React.FC = () => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const mq =
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+    let reducedMotion = mq?.matches ?? false;
+    const onMqChange = () => {
+      reducedMotion = mq?.matches ?? false;
+    };
+    mq?.addEventListener?.("change", onMqChange);
+
     let animId: number;
 
     const render = () => {
-      ctx.clearRect(0, 0, mapWidth, mapHeight);
+      const {
+        layout: curLayout,
+        robots: curRobots,
+        alerts: curAlerts,
+        selectedRobotId: curSelectedId,
+        storeWidth: curW,
+        storeHeight: curH,
+        scale: curScale,
+        mapWidth: curMapW,
+        mapHeight: curMapH,
+        theme: curTheme,
+      } = renderStateRef.current;
 
-      // 1. Dark floor background
-      ctx.fillStyle = "#070A10";
-      ctx.fillRect(0, 0, mapWidth, mapHeight);
+      const dpr = window.devicePixelRatio || 1;
+      const targetW = Math.round(curMapW * dpr);
+      const targetH = Math.round(curMapH * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, curMapW, curMapH);
+
+      const isLight = curTheme === "light";
+
+      // 1. Studio floor background
+      ctx.fillStyle = isLight ? "#FAF5F0" : "#140F0D";
+      ctx.fillRect(0, 0, curMapW, curMapH);
 
       // Subtle grid
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+      ctx.strokeStyle = isLight ? "rgba(72, 46, 32, 0.08)" : "rgba(255, 236, 224, 0.06)";
       ctx.lineWidth = 0.5;
-      for (let x = 0; x <= storeWidth; x += 4) {
+      for (let x = 0; x <= curW; x += 4) {
         ctx.beginPath();
-        ctx.moveTo(x * scale, 0);
-        ctx.lineTo(x * scale, mapHeight);
+        ctx.moveTo(x * curScale, 0);
+        ctx.lineTo(x * curScale, curMapH);
         ctx.stroke();
       }
-      for (let y = 0; y <= storeHeight; y += 4) {
+      for (let y = 0; y <= curH; y += 4) {
         ctx.beginPath();
-        ctx.moveTo(0, y * scale);
-        ctx.lineTo(mapWidth, y * scale);
+        ctx.moveTo(0, y * curScale);
+        ctx.lineTo(curMapW, y * curScale);
         ctx.stroke();
       }
 
       // 2. Shelf footprints
-      const cells = Array.isArray((layout as any)?.cells) ? (layout as any).cells : [];
+      const cells = Array.isArray((curLayout as any)?.cells) ? (curLayout as any).cells : [];
       cells.forEach((cell: any) => {
         if (cell.cell_type === "SHELF") {
           const p = getPos(cell);
-          ctx.fillStyle = cell.zone === "FROZEN" ? "#0e7490" : cell.zone === "CHILLED" ? "#1e3a8a" : "#1e293b";
-          ctx.fillRect(p.x * scale, p.y * scale, scale * 0.9, scale * 0.9);
+          ctx.fillStyle =
+            cell.zone === "FROZEN"
+              ? "#0891B2"
+              : cell.zone === "CHILLED"
+              ? "#2563EB"
+              : isLight
+              ? "#CBB8A9"
+              : "#382B24";
+          ctx.fillRect(p.x * curScale, p.y * curScale, curScale * 0.9, curScale * 0.9);
         }
       });
 
       // 3. Stations & Chargers
-      const stations = Array.isArray((layout as any)?.stations)
-        ? (layout as any).stations
-        : (layout as any)?.pick_stations || [];
-      ctx.fillStyle = "#059669";
+      const stations = Array.isArray((curLayout as any)?.stations)
+        ? (curLayout as any).stations
+        : (curLayout as any)?.pick_stations || [];
+      ctx.fillStyle = "#2E7D5B";
       stations.forEach((s: any) => {
         const p = getPos(s);
-        ctx.fillRect(p.x * scale, p.y * scale, scale * 0.9, scale * 0.9);
+        ctx.fillRect(p.x * curScale, p.y * curScale, curScale * 0.9, curScale * 0.9);
       });
 
-      const chargers = Array.isArray((layout as any)?.chargers) ? (layout as any).chargers : [];
-      ctx.fillStyle = "#d97706";
+      const chargers = Array.isArray((curLayout as any)?.chargers) ? (curLayout as any).chargers : [];
+      ctx.fillStyle = "#B4691E";
       chargers.forEach((c: any) => {
         const p = getPos(c);
-        ctx.fillRect(p.x * scale, p.y * scale, scale * 0.9, scale * 0.9);
+        ctx.fillRect(p.x * curScale, p.y * curScale, curScale * 0.9, curScale * 0.9);
       });
 
-      // 4. Alert Beacons
+      // 4. Alert Beacons (static ring when prefers-reduced-motion is active)
       const now = performance.now() / 1000;
-      alerts.forEach((alert) => {
+      curAlerts.forEach((alert) => {
         if (alert.cleared || !alert.coord) return;
-        const ax = alert.coord.x * scale + scale / 2;
-        const ay = alert.coord.y * scale + scale / 2;
+        const ax = (alert.coord.x + 0.5) * curScale;
+        const ay = (alert.coord.y + 0.5) * curScale;
         const isCritical = alert.severity === "CRITICAL";
 
-        // Pulsing ring
-        const pulse = 4 + 3 * Math.sin(now * 6);
-        ctx.strokeStyle = isCritical ? "rgba(239, 68, 68, 0.8)" : "rgba(245, 158, 11, 0.8)";
+        const ringRadius = reducedMotion ? 5.5 : 4 + 3 * Math.sin(now * 6);
+        ctx.strokeStyle = isCritical ? "rgba(185, 56, 41, 0.85)" : "rgba(180, 105, 30, 0.85)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(ax, ay, pulse, 0, Math.PI * 2);
+        ctx.arc(ax, ay, ringRadius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.fillStyle = isCritical ? "#EF4444" : "#F59E0B";
+        ctx.fillStyle = isCritical ? "#B93829" : "#B4691E";
         ctx.beginPath();
         ctx.arc(ax, ay, 2, 0, Math.PI * 2);
         ctx.fill();
       });
 
       // 5. Robots
-      Object.values(robots).forEach((r) => {
-        let rx = r.coord?.x ?? 0;
-        let ry = r.coord?.y ?? 0;
-        if (r.motion?.from_coord && r.motion?.to_coord) {
-          const prog = Math.max(0, Math.min(1, r.motion.progress ?? 0));
-          rx = r.motion.from_coord.x + (r.motion.to_coord.x - r.motion.from_coord.x) * prog;
-          ry = r.motion.from_coord.y + (r.motion.to_coord.y - r.motion.from_coord.y) * prog;
+      Object.values(curRobots).forEach((r) => {
+        const { rx, ry } = getInterpolatedCoord(r);
+        const cx = (rx + 0.5) * curScale;
+        const cy = (ry + 0.5) * curScale;
+        const isSelected = curSelectedId === r.id;
+
+        let color = isLight ? "#2E7D5B" : "#34D399";
+        if (r.state === "CHARGING") color = "#B4691E";
+        else if (r.state === "FAULTED" || r.state === "EMERGENCY_STOPPED") color = "#B93829";
+        else if (r.current_task_id || (r as any).carrying?.length > 0) color = "#D9533B";
+
+        if (isSelected) {
+          // High-contrast outer selection ring + inner accent ring
+          ctx.strokeStyle = isLight ? "#241B16" : "#FAF3EE";
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 6.4, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = "#D9533B";
+          ctx.lineWidth = 1.25;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 4.8, 0, Math.PI * 2);
+          ctx.stroke();
         }
-
-        const cx = rx * scale + scale / 2;
-        const cy = ry * scale + scale / 2;
-        const isSelected = selectedRobotId === r.id;
-
-        // Robot dot color
-        let color = "#10B981";
-        if (r.state === "CHARGING") color = "#F59E0B";
-        else if (r.state === "FAULTED" || r.state === "EMERGENCY_STOPPED") color = "#EF4444";
-        else if (r.current_task_id || (r as any).carrying?.length > 0) color = "#A855F7";
 
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(cx, cy, isSelected ? 3.5 : 2.5, 0, Math.PI * 2);
+        ctx.arc(cx, cy, isSelected ? 3.2 : 2.5, 0, Math.PI * 2);
         ctx.fill();
-
-        if (isSelected) {
-          ctx.strokeStyle = "#00F0FF";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-          ctx.stroke();
-        }
       });
 
       animId = requestAnimationFrame(render);
     };
 
     animId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animId);
-  }, [showMiniMap, layout, robots, alerts, selectedRobotId, storeWidth, storeHeight, scale, mapWidth, mapHeight]);
+    return () => {
+      cancelAnimationFrame(animId);
+      mq?.removeEventListener?.("change", onMqChange);
+    };
+  }, [showMiniMap]);
 
   if (!showMiniMap) return null;
 
+  const selectedRobot = selectedRobotId ? robots[selectedRobotId] : null;
+  const robotCount = Object.keys(robots).length;
+
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = (e.clientX - rect.left) / scale;
-    const clickY = (e.clientY - rect.top) / scale;
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const clickX = ((e.clientX - rect.left) / rect.width) * storeWidth;
+    const clickY = ((e.clientY - rect.top) / rect.height) * storeHeight;
 
-    // Find nearest robot within 2 grid units
+    // Match rendered center (rx + 0.5, ry + 0.5) using interpolated coordinates
     let nearestId: string | null = null;
     let minDist = 2.0;
 
     Object.values(robots).forEach((r) => {
-      const rx = r.coord?.x ?? 0;
-      const ry = r.coord?.y ?? 0;
-      const dist = Math.hypot(rx - clickX, ry - clickY);
+      const { rx, ry } = getInterpolatedCoord(r);
+      const dist = Math.hypot(rx + 0.5 - clickX, ry + 0.5 - clickY);
       if (dist < minDist) {
         minDist = dist;
         nearestId = r.id;
@@ -178,31 +261,37 @@ export const MiniMap2D: React.FC = () => {
 
   return (
     <div
-      className="absolute bottom-4 left-4 z-20 bg-gray-950/90 border border-white/10 rounded-xl p-2 shadow-2xl backdrop-blur-xl select-none"
+      className="absolute bottom-3 left-3 z-20 studio-card studio-enter stagger-2 rounded-2xl p-2.5 select-none"
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10 text-[10px] font-mono text-gray-400">
-        <div className="flex items-center gap-1 text-cyan-400 font-bold">
-          <Layers className="w-3 h-3" />
-          <span>2D RADAR</span>
+      <div className="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-[var(--studio-border)]">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--studio-text-primary)]">
+          <Layers className="w-3.5 h-3.5 text-[#B83B24] dark:text-[#E87454]" strokeWidth={1.5} />
+          <span>2D Radar</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setStore({ showMiniMap: false })}
-          className="p-0.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
-          title="Hide radar"
-          aria-label="Hide radar"
-        >
-          <X className="w-3 h-3" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[10px] tabular-nums text-[var(--studio-text-muted)]">
+            {selectedRobot
+              ? `(${selectedRobot.coord?.x ?? 0}, ${selectedRobot.coord?.y ?? 0})`
+              : `${robotCount} AMRs`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setStore({ showMiniMap: false })}
+            className="studio-btn p-1 rounded-lg text-[var(--studio-text-muted)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-subtle)] cursor-pointer"
+            title="Hide radar"
+            aria-label="Hide 2D radar mini-map"
+          >
+            <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
 
       <canvas
         ref={canvasRef}
-        width={mapWidth}
-        height={mapHeight}
         onClick={handleClick}
-        className="rounded border border-white/5 cursor-crosshair block"
+        className="rounded-[6px] border border-[var(--studio-border-strong)] cursor-crosshair block"
         style={{ width: `${mapWidth}px`, height: `${mapHeight}px` }}
       />
     </div>

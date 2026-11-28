@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { Activity, Cpu, Layers } from "lucide-react";
+import { Activity } from "lucide-react";
 import { useStore } from "../../store/useStore";
 
 export const DiagnosticsOverlay: React.FC = () => {
@@ -13,40 +13,62 @@ export const DiagnosticsOverlay: React.FC = () => {
   if (!showDiagnostics) return null;
 
   const fpsColor =
-    diagnostics.fps >= 55 ? "text-emerald-400" : diagnostics.fps >= 35 ? "text-amber-400" : "text-red-400";
+    diagnostics.fps >= 55
+      ? "text-[#176441] dark:text-emerald-300"
+      : diagnostics.fps >= 35
+      ? "text-[#85470D] dark:text-amber-300"
+      : "text-[#B83B24] dark:text-[#E87454]";
+
+  const withinBudget = diagnostics.drawCalls <= 200;
 
   return (
-    <div className="absolute bottom-4 right-4 z-20 bg-gray-950/90 border border-white/10 backdrop-blur-xl rounded-xl p-2.5 font-mono text-[11px] text-gray-300 shadow-2xl space-y-1.5 select-none min-w-[190px]">
-      <div className="flex items-center justify-between pb-1.5 border-b border-white/10 font-bold text-xs text-white">
-        <div className="flex items-center gap-1.5 text-cyan-400">
-          <Activity className="w-3.5 h-3.5" />
-          <span>WebGL2 Diagnostics</span>
+    <div className="absolute bottom-3 right-3 z-20 studio-card studio-enter stagger-3 rounded-2xl p-3 text-[11px] space-y-2 select-none min-w-[204px]">
+      <div className="flex items-center justify-between gap-3 pb-1.5 border-b border-[var(--studio-border)]">
+        <div className="flex items-center gap-1.5 font-semibold text-[12px] text-[var(--studio-text-primary)]">
+          <Activity className="w-3.5 h-3.5 text-[#B83B24] dark:text-[#E87454]" strokeWidth={1.5} />
+          <span>WebGL2 Telemetry</span>
         </div>
-        <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+        <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold bg-[#D9533B]/12 text-[#B83B24] dark:text-[#E87454] border border-[#D9533B]/25">
           {diagnostics.tier.toUpperCase()}
         </span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-gray-400">Frame Rate:</span>
-        <span className={`font-bold ${fpsColor}`}>{diagnostics.fps} FPS</span>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--studio-text-muted)]">Frame Rate</span>
+          <span className={`font-mono font-semibold tabular-nums ${fpsColor}`}>
+            {diagnostics.fps} FPS
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--studio-text-muted)]">Draw Calls</span>
+          <span className="font-mono font-semibold tabular-nums text-[var(--studio-text-primary)]">
+            {diagnostics.drawCalls}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--studio-text-muted)]">Triangles</span>
+          <span className="font-mono font-semibold tabular-nums text-[var(--studio-text-primary)]">
+            {(diagnostics.triangles / 1000).toFixed(1)}k
+          </span>
+        </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-gray-400">Draw Calls:</span>
-        <span className="font-semibold text-white">{diagnostics.drawCalls}</span>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-gray-400">Triangles:</span>
-        <span className="font-semibold text-white">
-          {(diagnostics.triangles / 1000).toFixed(1)}k
+      <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-[var(--studio-border)]">
+        <span className="text-[var(--studio-text-muted)] tabular-nums">
+          Budget: &le; 200 calls
         </span>
-      </div>
-
-      <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-white/5">
-        <span>Budget: &le; 200 calls</span>
-        <span className="text-emerald-400 font-bold">OPTIMAL</span>
+        <span
+          className={`font-mono font-semibold ${
+            withinBudget
+              ? "text-[#176441] dark:text-emerald-300"
+              : "text-[#85470D] dark:text-amber-300"
+          }`}
+        >
+          {withinBudget ? "OPTIMAL" : "ELEVATED"}
+        </span>
       </div>
     </div>
   );

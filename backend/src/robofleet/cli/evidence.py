@@ -110,11 +110,10 @@ def run_single_evidence_run(
     engine = SimEngine(config=config, layout=layout, skus=skus, bins=bins)
 
     orchestrator: MissionOrchestrator | None = None
-    if strategy in ("heuristic", "ai", "replay"):
-        provider_name = "anthropic" if strategy == "ai" else ("replay" if strategy == "replay" else "heuristic")
+    if strategy in ("heuristic", "ai", "local_llm", "replay"):
         orchestrator = MissionOrchestrator(
             engine=engine,
-            provider_name=provider_name,  # type: ignore
+            provider_name=strategy,
             rules_dir=rules_dir,
         )
         orchestrator.enabled = True

@@ -177,16 +177,24 @@ class ReservationAStarPlanner:
         blocked_cells: set[tuple[int, int]],
         rng: np.random.Generator,
         current_tick: int = 0,
+        per_robot_avoid: dict[str, set[tuple[int, int]]] | None = None,
+        priority_robots: set[str] | None = None,
     ) -> tuple[dict[str, MoveIntent], list[str]]:
         self.table.prune_old_ticks(current_tick)
         grid_lookup: dict[tuple[int, int], Cell] = {c.pos.as_tuple(): c for c in layout.cells}
         intents: dict[str, MoveIntent] = {}
         deadlocked_robots: list[str] = []
+        prio_set = priority_robots or set()
 
-        # Deterministic sorting of robots by age / battery / id
+        # Deterministic sorting of robots by AI priority / age / battery / id
         ordered_robots = sorted(
             robots,
-            key=lambda r: (r.blocked_ticks, -r.battery_pct, r.robot_id),
+            key=lambda r: (
+                1 if r.robot_id in prio_set else 0,
+                r.blocked_ticks,
+                -r.battery_pct,
+                r.robot_id,
+            ),
             reverse=True,
         )
 
@@ -195,6 +203,11 @@ class ReservationAStarPlanner:
         for robot in ordered_robots:
             r_id = robot.robot_id
             goal = destinations.get(r_id, robot.cell)
+            robot_blocked = (
+                set(blocked_cells) | per_robot_avoid.get(r_id, set())
+                if per_robot_avoid
+                else blocked_cells
+            )
 
             # Fast path: already at goal
             if robot.cell.as_tuple() == goal.as_tuple():
@@ -210,7 +223,7 @@ class ReservationAStarPlanner:
                 or len(cached_path) < 2
                 or cached_path[-1].as_tuple() != goal.as_tuple()
                 or (len(cached_path) > 0 and cached_path[0].as_tuple() != robot.cell.as_tuple())
-                or (len(cached_path) > 1 and cached_path[1].as_tuple() in blocked_cells)
+                or (len(cached_path) > 1 and cached_path[1].as_tuple() in robot_blocked)
                 or robot.blocked_ticks >= self.replan_wait_ticks
             )
 
@@ -220,7 +233,7 @@ class ReservationAStarPlanner:
                     robot=robot,
                     goal=goal,
                     grid=grid_lookup,
-                    blocked=blocked_cells,
+                    blocked=robot_blocked,
                     start_tick=current_tick,
                 )
                 if new_path and len(new_path) >= 1:

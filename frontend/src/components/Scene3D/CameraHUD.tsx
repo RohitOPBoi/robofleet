@@ -12,10 +12,11 @@ import {
   Layers,
   MapPin,
   Moon,
-  Sparkles,
   Sun,
+  Sunset,
   Truck,
   Video,
+  Warehouse,
 } from "lucide-react";
 import { setStore, useStore } from "../../store/useStore";
 
@@ -30,176 +31,219 @@ export const CameraHUD: React.FC = () => {
 
   return (
     <div
-      className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-gray-950/85 border border-white/10 backdrop-blur-xl rounded-xl p-1.5 text-xs shadow-2xl select-none"
+      className="absolute top-3 left-3 z-20 studio-card studio-enter stagger-1 flex flex-wrap items-center gap-1.5 rounded-2xl p-1.5 text-xs select-none max-w-[calc(100%-1.5rem)]"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Camera Mode Segmented Pill */}
-      <div className="flex items-center gap-0.5 bg-gray-900 border border-white/5 rounded-lg p-0.5 font-mono text-[11px]">
+      <div
+        className="flex flex-wrap items-center gap-0.5 rounded-[10px] p-0.5 border text-[11px] font-medium"
+        style={{
+          background: "var(--studio-surface-subtle)",
+          borderColor: "var(--studio-border)",
+        }}
+      >
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "orbit" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 flex items-center gap-1 ${
+          aria-label="Free orbit camera"
+          aria-pressed={cameraMode === "orbit"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "orbit"
-              ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Free Orbit Camera (Key: C to cycle)"
         >
-          <Camera className="w-3.5 h-3.5" />
+          <Camera className="w-3.5 h-3.5" strokeWidth={1.5} />
           <span>Orbit</span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "isometric" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 flex items-center gap-1 ${
+          aria-label="Top isometric 45 degree projection"
+          aria-pressed={cameraMode === "isometric"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "isometric"
-              ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Top Isometric 45° Projection"
         >
-          <Compass className="w-3.5 h-3.5" />
+          <Compass className="w-3.5 h-3.5" strokeWidth={1.5} />
           <span>Iso</span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "follow" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 flex items-center gap-1 ${
+          aria-label="Follow selected AMR chase camera"
+          aria-pressed={cameraMode === "follow"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "follow"
-              ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Follow Selected AMR (Smoothed Chase)"
         >
-          <MapPin className="w-3.5 h-3.5" />
+          <MapPin className="w-3.5 h-3.5" strokeWidth={1.5} />
           <span>Chase</span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "stations" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 ${
+          aria-label="Focus picking stations"
+          aria-pressed={cameraMode === "stations"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "stations"
-              ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Station Booths Focus"
         >
-          Stations
+          <Warehouse className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span>Stations</span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "dispatch" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 flex items-center gap-1 ${
+          aria-label="Focus dispatch bay and staging"
+          aria-pressed={cameraMode === "dispatch"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "dispatch"
-              ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Dispatch Bay & Staging"
         >
-          <Truck className="w-3.5 h-3.5" />
+          <Truck className="w-3.5 h-3.5" strokeWidth={1.5} />
           <span>Dispatch</span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ cameraMode: "cinematic" })}
-          className={`px-2 py-1 rounded-md transition cursor-pointer active:scale-95 flex items-center gap-1 ${
+          aria-label="Cinematic camera tour"
+          aria-pressed={cameraMode === "cinematic"}
+          className={`studio-btn px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 ${
             cameraMode === "cinematic"
-              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white font-extrabold shadow-sm shadow-purple-500/40 animate-pulse"
-              : "text-purple-400 hover:text-white hover:bg-white/5"
+              ? "bg-[#D9533B] text-[#FFFBF8] font-semibold shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Cinematic Tour (Autocuts to live alerts)"
         >
-          <Video className="w-3.5 h-3.5" />
+          <Video className="w-3.5 h-3.5" strokeWidth={1.5} />
           <span>Tour</span>
         </button>
       </div>
 
-      <div className="h-4 w-px bg-white/10" />
+      <div className="h-4 w-px bg-[var(--studio-border-strong)]" />
 
       {/* Lighting Preset Selector */}
-      <div className="flex items-center gap-0.5 bg-gray-900 border border-white/5 rounded-lg p-0.5 font-mono text-[11px]">
+      <div
+        className="flex items-center gap-0.5 rounded-[10px] p-0.5 border"
+        style={{
+          background: "var(--studio-surface-subtle)",
+          borderColor: "var(--studio-border)",
+        }}
+      >
         <button
           type="button"
           onClick={() => setStore({ lightingPreset: "daylight" })}
-          className={`p-1 rounded-md transition cursor-pointer ${
-            lightingPreset === "daylight" ? "bg-amber-400 text-black font-bold shadow-sm" : "text-gray-400 hover:text-white"
+          aria-label="Daylight lighting preset"
+          aria-pressed={lightingPreset === "daylight"}
+          className={`studio-btn p-1.5 rounded-lg cursor-pointer ${
+            lightingPreset === "daylight"
+              ? "bg-[#D9533B] text-[#FFFBF8] shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Daylight Lighting (Key: L)"
         >
-          <Sun className="w-3.5 h-3.5" />
+          <Sun className="w-3.5 h-3.5" strokeWidth={1.5} />
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ lightingPreset: "warm_evening" })}
-          className={`p-1 rounded-md transition cursor-pointer ${
-            lightingPreset === "warm_evening" ? "bg-amber-600 text-white font-bold shadow-sm" : "text-gray-400 hover:text-white"
+          aria-label="Warm evening lighting preset"
+          aria-pressed={lightingPreset === "warm_evening"}
+          className={`studio-btn p-1.5 rounded-lg cursor-pointer ${
+            lightingPreset === "warm_evening"
+              ? "bg-[#D9533B] text-[#FFFBF8] shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
           title="Warm Evening Lighting (Key: L)"
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <Sunset className="w-3.5 h-3.5" strokeWidth={1.5} />
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ lightingPreset: "night_ops" })}
-          className={`p-1 rounded-md transition cursor-pointer ${
-            lightingPreset === "night_ops" ? "bg-blue-600 text-white font-bold shadow-sm" : "text-gray-400 hover:text-white"
+          aria-label="Night operations lighting preset"
+          aria-pressed={lightingPreset === "night_ops"}
+          className={`studio-btn p-1.5 rounded-lg cursor-pointer ${
+            lightingPreset === "night_ops"
+              ? "bg-[#D9533B] text-[#FFFBF8] shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-elevated)]"
           }`}
-          title="Night Operations Cyber Lighting (Key: L)"
+          title="Night Operations Lighting (Key: L)"
         >
-          <Moon className="w-3.5 h-3.5" />
+          <Moon className="w-3.5 h-3.5" strokeWidth={1.5} />
         </button>
       </div>
 
-      <div className="h-4 w-px bg-white/10" />
+      <div className="h-4 w-px bg-[var(--studio-border-strong)]" />
 
       {/* Path Ribbons Toggle */}
       <button
         type="button"
         onClick={() => setStore({ show3DPaths: !show3DPaths })}
-        className={`p-1.5 rounded-lg transition active:scale-95 cursor-pointer ${
+        aria-label="Toggle 3D path ribbons"
+        aria-pressed={show3DPaths}
+        className={`studio-btn p-1.5 rounded-[10px] border cursor-pointer ${
           show3DPaths
-            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
-            : "text-gray-400 hover:text-white hover:bg-white/5"
+            ? "bg-[#D9533B] text-[#FFFBF8] border-[#D9533B] shadow-sm"
+            : "border-transparent text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-subtle)]"
         }`}
-        title="Toggle 3D Path Laser Ribbons"
+        title="Toggle 3D Path Ribbons"
       >
-        <Eye className="w-3.5 h-3.5" />
+        <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
       </button>
 
       {/* MiniMap Toggle */}
       <button
         type="button"
         onClick={() => setStore({ showMiniMap: !showMiniMap })}
-        className={`p-1.5 rounded-lg transition active:scale-95 cursor-pointer ${
+        aria-label="Toggle 2D radar mini-map"
+        aria-pressed={showMiniMap}
+        className={`studio-btn p-1.5 rounded-[10px] border cursor-pointer ${
           showMiniMap
-            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
-            : "text-gray-400 hover:text-white hover:bg-white/5"
+            ? "bg-[#D9533B] text-[#FFFBF8] border-[#D9533B] shadow-sm"
+            : "border-transparent text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-subtle)]"
         }`}
         title="Toggle 2D Picture-in-Picture Mini-Map"
       >
-        <Layers className="w-3.5 h-3.5" />
+        <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
       </button>
 
       {/* Diagnostics Toggle */}
       <button
         type="button"
         onClick={() => setStore({ showDiagnostics: !showDiagnostics })}
-        className={`p-1.5 rounded-lg transition active:scale-95 cursor-pointer ${
+        aria-label="Toggle performance diagnostics overlay"
+        aria-pressed={showDiagnostics}
+        className={`studio-btn p-1.5 rounded-[10px] border cursor-pointer ${
           showDiagnostics
-            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-            : "text-gray-400 hover:text-white hover:bg-white/5"
+            ? "bg-[#D9533B] text-[#FFFBF8] border-[#D9533B] shadow-sm"
+            : "border-transparent text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-[var(--studio-surface-subtle)]"
         }`}
         title="Toggle Performance Diagnostics Overlay"
       >
-        <Activity className="w-3.5 h-3.5" />
+        <Activity className="w-3.5 h-3.5" strokeWidth={1.5} />
       </button>
     </div>
   );

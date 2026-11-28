@@ -70,15 +70,33 @@ server:
 ### 2.5 AI Operations Brain Configuration (`brain`)
 ```yaml
 brain:
-  enabled: true                        # Enable AI Mode (false for baseline fallback)
-  provider: "heuristic"                # heuristic | anthropic | replay
-  model: "claude-3-5-sonnet-20241022"  # Target model for Anthropic provider
-  circuit_threshold: 3                 # Failures before circuit trips open
-  circuit_cooldown_s: 30.0             # Cooldown period before probing LLM
-  timeout_s: 2.0                       # LLM request timeout
-  rules_dir: "rules"                   # Declarative governance YAML directory
-  decisions_log: "runs/decisions.ndjson" # Output path for unified decision log
+  operating_mode: "heuristic"          # heuristic | ai | local_llm | replay
+  heartbeat_ticks: 50                  # Periodic decision heartbeat interval
+  deadlock_no_progress_ticks: 12       # Ticks stalled before deadlock triage
+  outcome_eval_window_ticks: 20        # Post-execution outcome evaluation window
+  max_decision_staleness_ticks: 30     # Async LLM staleness cutoff
+  cloud:
+    provider_type: "openai"            # openai | openrouter | groq | together | fireworks | deepseek | anthropic | custom
+    api_compatibility: "openai_chat"   # openai_chat | openai_responses | anthropic_messages
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    timeout_s: 12.0
+    max_tokens: 900
+    temperature: 0.15
+    fallback_policy: "heuristic"       # heuristic | safe_wait
+  local:
+    provider: "ollama"
+    base_url: "http://localhost:11434"
+    model: "qwen3.5:4b"                # Recommended local initial model
+    timeout_s: 15.0
+    context_length: 4096
+    temperature: 0.15
+    max_tokens: 512
+    max_concurrency: 1
+    fallback_policy: "heuristic"       # heuristic | safe_wait
 ```
+
+API keys for **AI Mode** are intentionally excluded from `ScenarioConfig` YAML dumps and `/api/config/effective`. Supply credentials at runtime through the UI **AI Settings** modal or environment variables (`ROBOFLEET_AI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`).
 
 ---
 

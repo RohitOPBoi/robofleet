@@ -50,11 +50,10 @@ def run_single_chaos_seed(
     engine.chaos_engine.load_chaos_scenario(scenario_path)
 
     orchestrator = None
-    if mode in ("heuristic", "ai", "replay"):
-        provider_name = "anthropic" if mode == "ai" else ("replay" if mode == "replay" else "heuristic")
+    if mode in ("heuristic", "ai", "local_llm", "replay"):
         orchestrator = MissionOrchestrator(
             engine=engine,
-            provider_name=provider_name,  # type: ignore
+            provider_name=mode,
             rules_dir=rules_dir,
         )
 

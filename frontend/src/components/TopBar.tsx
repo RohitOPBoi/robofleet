@@ -1,28 +1,20 @@
 import React, { useState } from "react";
 import {
-  AlertOctagon,
-  AlertTriangle,
-  BatteryCharging,
+  Activity,
+  BarChart3,
   Brain,
-  Clock,
   Flame,
   Info,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
   Pause,
   Play,
   RotateCcw,
-  RotateCw,
-  ShieldCheck,
+  Settings,
   StepForward,
   Sun,
-  Terminal,
-  Truck,
   UserCheck,
-  Zap,
   ZapOff,
 } from "lucide-react";
 import {
@@ -31,6 +23,7 @@ import {
   resumeSimulation,
   scaleFleet,
   setBrainMode,
+  setBrainProvider,
   setSimulationSpeed,
   stepSimulation,
   triggerRush,
@@ -40,15 +33,26 @@ import { setStore, useStore } from "../store/useStore";
 export const TopBar: React.FC = () => {
   const store = useStore();
   const {
-    connected,
-    kpis,
-    simTimeMs,
+    activeWorkspaceView,
+    alerts,
+    activeFaults,
+    activeFaultsCount,
+    aiMode,
+    brainConnectionState,
+    decisions,
+    environmentDisclosure,
     isPaused,
-    speedMultiplier,
-    theme,
     leftPanelOpen,
+    pendingApprovals,
     rightPanelOpen,
+    robots,
+    simTimeMs,
+    speedMultiplier,
+    staticWorld,
+    theme,
+    tick,
   } = store;
+
   const [rushPending, setRushPending] = useState(false);
 
   // Format sim time in HH:mm:ss
@@ -57,6 +61,15 @@ export const TopBar: React.FC = () => {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const formattedTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+  const robotCount = Object.keys(robots).length;
+  const activeAlertCount = alerts.filter((a) => !a.cleared).length;
+  const faultCount = Math.max(activeFaults.length, activeFaultsCount);
+  const scenarioRaw =
+    environmentDisclosure?.scenario ||
+    staticWorld?.meta?.scenario_name ||
+    "standard";
+  const scenarioBase = scenarioRaw.charAt(0).toUpperCase() + scenarioRaw.slice(1);
 
   const togglePause = async () => {
     const nextPaused = !isPaused;
@@ -98,6 +111,7 @@ export const TopBar: React.FC = () => {
         orders: {},
         activeFaults: [],
         alerts: [],
+        kpiHistory: [],
         selectedRobotId: null,
       });
     } catch (e) {
@@ -106,19 +120,23 @@ export const TopBar: React.FC = () => {
   };
 
   const handleRush = async () => {
+    if (rushPending) return;
     setRushPending(true);
     try {
       await triggerRush(2.5, 300);
     } catch (e) {
       console.error("Rush burst error:", e);
     } finally {
-      setTimeout(() => setRushPending(false), 1500);
+      setTimeout(() => setRushPending(false), 600);
     }
   };
 
   const toggleTheme = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
     setStore({ theme: nextTheme });
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("ROBOFLEET_THEME", nextTheme);
+    }
     if (nextTheme === "light") {
       document.documentElement.classList.remove("dark");
       document.documentElement.classList.add("light");
@@ -128,398 +146,363 @@ export const TopBar: React.FC = () => {
     }
   };
 
-  const robotCount = Object.keys(store.robots).length;
-
-  const handleToggleAiMode = async (mode: "baseline" | "ai") => {
-    const isAi = mode === "ai";
+  const handleSelectOperatingMode = async (
+    mode: "baseline" | "heuristic" | "ai" | "local_llm"
+  ) => {
     setStore({ aiMode: mode });
     try {
-      await setBrainMode(isAi);
+      const res =
+        mode === "baseline" ? await setBrainMode(false) : await setBrainProvider(mode);
+      if (res) {
+        setStore({
+          aiMode: res.mode || mode,
+          brainProvider: res.provider || mode,
+          brainConnectionState: res.connection_state || brainConnectionState,
+          brainModelName: res.model_name || "",
+        });
+      }
     } catch (e) {
-      console.error("Failed to toggle AI mode:", e);
+      console.error("Failed to switch Brain operating mode:", e);
     }
   };
 
   return (
-    <header className="h-14 border-b border-white/10 bg-gray-950/95 backdrop-blur-xl px-2 sm:px-3 flex items-center justify-between text-xs z-30 select-none overflow-hidden shrink-0 gap-1.5 md:gap-2">
-      {/* Left: Brand, Panel Toggle & Sim Controls */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        {/* Toggle Left Sidebar */}
+    <header className="h-14 px-3 xl:px-4 flex items-center justify-between border-b studio-glass-bar z-30 shrink-0 gap-2 select-none">
+      {/* Left: Drawer Toggle, Title & Clock Metadata */}
+      <div className="flex items-center gap-2 min-w-0 shrink">
         <button
           type="button"
           onClick={() => setStore({ leftPanelOpen: !leftPanelOpen })}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
-          title={leftPanelOpen ? "Collapse orders sidebar ([)" : "Expand orders sidebar ([)"}
+          className="studio-btn p-1.5 rounded-xl bg-[var(--studio-surface-subtle)] hover:bg-[var(--studio-surface-elevated)] border border-[var(--studio-border)] text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] cursor-pointer shrink-0"
+          title={leftPanelOpen ? "Collapse orders drawer ([)" : "Expand orders drawer ([)"}
+          aria-label={leftPanelOpen ? "Collapse orders drawer" : "Expand orders drawer"}
         >
-          {leftPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          {leftPanelOpen ? (
+            <PanelLeftClose className="w-4 h-4" strokeWidth={1.5} />
+          ) : (
+            <PanelLeftOpen className="w-4 h-4" strokeWidth={1.5} />
+          )}
         </button>
 
-        {/* Brand */}
-        <div className="flex items-center gap-1.5">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-black text-black text-xs shadow-md shadow-cyan-500/25">
-            RF
-          </div>
-          <span className="font-bold tracking-tight text-white text-sm hidden sm:inline">RoboFleet</span>
+        <div className="min-w-0 flex flex-col justify-center">
+          <h1 className="text-[14px] xl:text-[15px] font-semibold tracking-tight text-[var(--studio-text-primary)] leading-tight whitespace-nowrap">
+            RoboFleet<span className="hidden 2xl:inline"> Studio</span>
+          </h1>
+          <p className="text-[11px] text-[var(--studio-text-muted)] leading-tight whitespace-nowrap font-normal tabular-nums">
+            <span>{scenarioBase}</span>
+            <span className="mx-1 opacity-55">·</span>
+            <span className="font-mono">{formattedTime}</span>
+            <span className="mx-1 opacity-55 hidden xl:inline">·</span>
+            <span className="font-mono hidden xl:inline">T+{tick}</span>
+            <span className="mx-1 opacity-55 hidden sm:inline">·</span>
+            <span
+              className={`hidden sm:inline font-medium ${isPaused
+                ? "text-[#B4691E] dark:text-amber-300"
+                : "text-[#1D6144] dark:text-emerald-400"
+                }`}
+            >
+              {isPaused ? "Paused" : "Live"}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {/* Center: Instant View Mode Switcher + Simulation Transport + Fleet & Rush */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* 2D | 3D | Split | Analytics Direct Switcher */}
+        <div
+          className="flex items-center gap-0.5 rounded-full p-0.5 border text-[11px]"
+          style={{
+            background: "var(--studio-surface-subtle)",
+            borderColor: "var(--studio-border)",
+          }}
+        >
+          {(["2d", "3d", "split"] as const).map((mode) => {
+            const active = activeWorkspaceView === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setStore({ activeWorkspaceView: mode, viewMode: mode })}
+                className={`studio-btn px-2 py-1 rounded-full font-semibold uppercase tracking-wide text-[10.5px] cursor-pointer ${active
+                  ? "bg-[#1C1917] text-white dark:bg-[#FFFBF8] dark:text-[#241B16] shadow-sm"
+                  : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
+                  }`}
+                title={`Switch to ${mode.toUpperCase()} view (V to cycle)`}
+              >
+                {mode}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            aria-pressed={activeWorkspaceView === "overview"}
+            onClick={() =>
+              setStore({
+                activeWorkspaceView: activeWorkspaceView === "overview" ? "split" : "overview",
+              })
+            }
+            className={`studio-btn px-2 py-1 rounded-full font-medium text-[10.5px] flex items-center gap-1 cursor-pointer ${activeWorkspaceView === "overview"
+              ? "bg-studio-terracotta text-white shadow-sm"
+              : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
+              }`}
+            title="Toggle full analytics overview"
+          >
+            <BarChart3 className="w-3 h-3" strokeWidth={1.5} />
+            <span className="hidden lg:inline">Analytics</span>
+          </button>
         </div>
 
-        {/* Sim Clock */}
-        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-900 border border-white/5 font-mono text-gray-200">
-          <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="font-bold text-xs">{formattedTime}</span>
-          <span className="text-[10px] text-gray-500 hidden md:inline">T+{store.tick}</span>
-        </div>
-
-        {/* Sim Controls: Play/Pause, Step, Restart */}
-        <div className="flex items-center gap-0.5 bg-gray-900 border border-white/5 rounded-lg p-0.5">
+        {/* Simulation Transport Pill */}
+        <div
+          className="flex items-center gap-0.5 rounded-full p-0.5 border text-[11px]"
+          style={{
+            background: "var(--studio-surface-subtle)",
+            borderColor: "var(--studio-border)",
+          }}
+        >
           <button
             type="button"
             onClick={togglePause}
+            aria-label={isPaused ? "Resume simulation" : "Pause simulation"}
+            aria-pressed={isPaused}
             title={isPaused ? "Resume simulation (Space)" : "Pause simulation (Space)"}
-            className={`p-1.5 rounded-md transition active:scale-95 cursor-pointer ${isPaused
-              ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
-              : "text-gray-300 hover:bg-white/10 hover:text-white"
+            className={`studio-btn p-1.5 rounded-full cursor-pointer ${isPaused
+              ? "bg-amber-600/18 text-[#8F4F0D] dark:text-amber-300"
+              : "text-[var(--studio-text-primary)] hover:bg-black/5 dark:hover:bg-white/10"
               }`}
           >
-            {isPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5 fill-current" />}
+            {isPaused ? (
+              <Play className="w-3.5 h-3.5 fill-current" strokeWidth={1.5} />
+            ) : (
+              <Pause className="w-3.5 h-3.5 fill-current" strokeWidth={1.5} />
+            )}
           </button>
           <button
             type="button"
             onClick={handleStep}
+            aria-label="Step simulation one tick"
             title="Single step (1 tick)"
-            className="p-1.5 rounded-md text-gray-400 hover:bg-white/10 hover:text-white transition active:scale-95 cursor-pointer"
+            className="studio-btn p-1.5 rounded-full text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
           >
-            <StepForward className="w-3.5 h-3.5" />
+            <StepForward className="w-3.5 h-3.5" strokeWidth={1.5} />
           </button>
+
+          <div className="hidden xl:block w-px h-3.5 bg-[var(--studio-border-strong)] mx-0.5" />
+
+          <div className="hidden xl:flex items-center gap-0.5 font-mono">
+            {[1, 2, 5, 10].map((speed) => (
+              <button
+                key={speed}
+                type="button"
+                aria-pressed={speedMultiplier === speed}
+                onClick={() => handleSpeed(speed)}
+                className={`studio-btn px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer tabular-nums ${speedMultiplier === speed
+                  ? "bg-[#1C1917] text-white dark:bg-[#FFFBF8] dark:text-[#241B16]"
+                  : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
+                  }`}
+                title={`Set speed to ${speed}x`}
+              >
+                {speed}x
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-3.5 bg-[var(--studio-border-strong)] mx-0.5" />
+
           <button
             type="button"
             onClick={handleRestart}
+            aria-label="Restart simulation"
             title="Restart simulation (Reset to T+0)"
-            className="p-1.5 rounded-md text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition active:scale-95 cursor-pointer"
+            className="studio-btn p-1.5 rounded-full text-studio-terracotta hover:bg-studio-terracotta/12 cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} />
           </button>
         </div>
 
-        {/* Speed Controls: Ultra-Sleek Segmented Pill Tabs */}
-        <div className="hidden sm:flex items-center gap-0.5 bg-gray-900 border border-white/5 rounded-lg p-0.5">
-          {[0.5, 1, 2, 5, 10, 20].map((speed) => (
-            <button
-              key={speed}
-              type="button"
-              onClick={() => handleSpeed(speed)}
-              className={`px-1.5 py-0.5 text-[10px] font-mono rounded-md transition active:scale-95 cursor-pointer ${speedMultiplier === speed
-                ? "bg-cyan-500 text-black font-extrabold shadow-sm shadow-cyan-500/40"
-                : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
-                }`}
-              title={`Set speed to ${speed}x`}
-            >
-              {speed}x
-            </button>
-          ))}
-        </div>
-
-        {/* Rush Burst Trigger */}
+        {/* Rush Burst & Fleet Scale Direct Access */}
         <button
           type="button"
           onClick={handleRush}
           disabled={rushPending}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium text-xs transition border cursor-pointer active:scale-95 ${
-            rushPending
-              ? "bg-orange-600 text-white border-orange-500 shadow-md shadow-orange-600/30 animate-pulse font-bold"
-              : "bg-orange-950/50 border-orange-700/80 text-orange-400 hover:bg-orange-900/60 hover:text-orange-300"
-          }`}
-          title="Inject immediate 2.5x demand surge + 6 priority orders burst"
+          className={`studio-btn flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold cursor-pointer border ${rushPending
+            ? "bg-studio-terracotta text-white border-studio-terracotta"
+            : "bg-studio-terracotta/14 hover:bg-studio-terracotta text-[#A53420] hover:text-white dark:text-[#FFA991] dark:hover:text-white border-studio-terracotta/30"
+            }`}
+          title="Inject immediate 2.5x express demand surge"
         >
-          <Flame className={`w-3.5 h-3.5 ${rushPending ? "animate-bounce text-yellow-300" : ""}`} />
-          <span className="text-[11px] font-semibold">{rushPending ? "Rushing..." : "Rush Mode"}</span>
+          <Flame className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span className="hidden lg:inline">{rushPending ? "Rushing..." : "Rush"}</span>
         </button>
 
-        {/* Dynamic Fleet Scale Controls */}
-        <div className="hidden md:flex items-center gap-1 bg-gray-900 border border-white/5 rounded-lg px-2 py-1 font-mono text-[10px]">
-          <span className="text-gray-400">{robotCount} AMRs</span>
-          <div className="flex items-center gap-0.5 ml-0.5">
-            <button
-              type="button"
-              onClick={async () => {
-                const count = Math.max(1, robotCount - 1);
-                await scaleFleet(count);
-              }}
-              className="w-4 h-4 flex items-center justify-center rounded bg-gray-800 hover:bg-gray-700 text-gray-200 transition active:scale-90 cursor-pointer font-bold"
-              title="Retire 1 AMR"
-            >
-              -
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                const count = Math.min(100, robotCount + 1);
-                await scaleFleet(count);
-              }}
-              className="w-4 h-4 flex items-center justify-center rounded bg-gray-800 hover:bg-gray-700 text-gray-200 transition active:scale-90 cursor-pointer font-bold"
-              title="Spawn 1 AMR"
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        {/* Baseline | AI Mode Segmented Switcher */}
-        <div className="flex items-center gap-0.5 bg-gray-900 border border-white/10 rounded-lg p-0.5 font-mono text-[10px]">
+        <div
+          className="hidden lg:flex items-center gap-1 rounded-full px-2 py-1 border font-mono text-[10.5px] tabular-nums"
+          style={{
+            background: "var(--studio-surface-subtle)",
+            borderColor: "var(--studio-border)",
+          }}
+        >
+          <span className="text-[var(--studio-text-secondary)]">{robotCount} AMRs</span>
           <button
             type="button"
-            onClick={() => handleToggleAiMode("baseline")}
-            className={`px-1.5 py-0.5 rounded-md font-bold transition active:scale-95 cursor-pointer ${store.aiMode === "baseline"
-              ? "bg-gray-700 text-white shadow-sm"
-              : "text-gray-400 hover:text-gray-200"
-              }`}
-            title="Baseline deterministic heuristic control"
+            onClick={() => scaleFleet(Math.max(1, robotCount - 1))}
+            className="studio-btn w-4 h-4 rounded-full bg-[var(--studio-surface-elevated)] hover:bg-studio-terracotta hover:text-white border border-[var(--studio-border)] text-[var(--studio-text-primary)] flex items-center justify-center cursor-pointer"
+            title="Retire 1 AMR"
+            aria-label="Decrease fleet size"
           >
-            BASE
+            -
           </button>
           <button
             type="button"
-            onClick={() => handleToggleAiMode("ai")}
-            className={`px-1.5 py-0.5 rounded-md font-bold transition active:scale-95 cursor-pointer flex items-center gap-1 ${store.aiMode === "ai"
-              ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm shadow-indigo-500/30"
-              : "text-gray-400 hover:text-gray-200"
-              }`}
-            title="AI Operations Brain (Mission Orchestrator + Specialists)"
+            onClick={() => scaleFleet(Math.min(100, robotCount + 1))}
+            className="studio-btn w-4 h-4 rounded-full bg-[var(--studio-surface-elevated)] hover:bg-studio-terracotta hover:text-white border border-[var(--studio-border)] text-[var(--studio-text-primary)] flex items-center justify-center cursor-pointer"
+            title="Spawn 1 AMR"
+            aria-label="Increase fleet size"
           >
-            <Brain className="w-3 h-3" />
-            AI
+            +
           </button>
         </div>
       </div>
 
-      {/* Middle: Live KPI Strip (Responsive) */}
-      <div className="hidden 2xl:flex items-center gap-2 bg-gray-900/90 border border-white/5 px-2 py-1 rounded-lg font-mono text-[11px] shrink-0">
-        <div className="flex items-center gap-1" title="Orders waiting in queue">
-          <Truck className="w-3 h-3 text-cyan-400" />
-          <span className="text-gray-400">Q:</span>
-          <span className="font-bold text-white">{kpis.queue_depth ?? 0}</span>
-        </div>
-        <div className="h-3 w-px bg-white/10" />
-        <div className="flex items-center gap-1" title="Throughput per hour">
-          <Zap className="w-3 h-3 text-amber-400" />
-          <span className="text-gray-400">Rate:</span>
-          <span className="font-bold text-white">{kpis.throughput_orders_per_hr ?? 0}/h</span>
-        </div>
-        <div className="h-3 w-px bg-white/10" />
+      {/* Right: AI Mode Segmented Control, Direct Drawers, Digital Twin, Theme */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* AI Operating Mode Segmented Pill */}
         <div
-          className={`flex items-center gap-1 ${(kpis.at_risk_orders ?? 0) > 0 ? "text-red-400 font-bold" : "text-gray-400"
-            }`}
-          title="Orders nearing SLA deadline"
+          className="hidden md:flex items-center gap-0.5 rounded-full p-0.5 text-[10.5px] font-mono border"
+          style={{
+            background: "var(--studio-surface-subtle)",
+            borderColor: "var(--studio-border)",
+          }}
         >
-          <Clock className="w-3 h-3" />
-          <span>Risk:</span>
-          <span>{kpis.at_risk_orders ?? 0}</span>
+          {(
+            [
+              { id: "baseline", label: "BASE", activeCls: "bg-[#1C1917] text-white dark:bg-[#FFFBF8] dark:text-[#241B16]" },
+              { id: "heuristic", label: "HEUR", activeCls: "bg-studio-terracotta text-white" },
+              { id: "ai", label: "AI", activeCls: "bg-studio-amber text-white" },
+              { id: "local_llm", label: "LOCAL", activeCls: "bg-studio-sage text-white" },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              aria-pressed={aiMode === m.id}
+              onClick={() => handleSelectOperatingMode(m.id)}
+              className={`studio-btn px-2 py-1 rounded-full font-semibold cursor-pointer ${aiMode === m.id
+                ? `${m.activeCls} shadow-sm`
+                : "text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
+                }`}
+              title={`Switch Brain mode to ${m.label}`}
+            >
+              {m.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setStore({ isAISettingsOpen: true })}
+            className="studio-btn p-1.5 rounded-full text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] cursor-pointer"
+            title={`Configure AI & Local LLM (${brainConnectionState})`}
+            aria-label={`AI & Local Model Settings (${brainConnectionState})`}
+          >
+            <Settings className="w-3.5 h-3.5" strokeWidth={1.5} />
+          </button>
         </div>
-        <div className="h-3 w-px bg-white/10" />
-        <div className="flex items-center gap-1" title="AMR Fleet Utilization">
-          <BatteryCharging className="w-3 h-3 text-emerald-400" />
-          <span className="text-emerald-400">{kpis.robots_moving ?? 0}m</span>
-          <span className="text-gray-500">/</span>
-          <span className="text-gray-300">{kpis.robots_idle ?? 0}i</span>
-        </div>
-        <div className="h-3 w-px bg-white/10" />
-        <div
-          className={`flex items-center gap-1 ${(kpis.active_alerts_count ?? 0) > 0 ? "text-amber-400 font-bold" : "text-gray-400"
-            }`}
-          title="Active safety alerts"
-        >
-          <AlertTriangle className="w-3 h-3" />
-          <span>{kpis.active_alerts_count ?? 0}</span>
-        </div>
-      </div>
 
-      {/* Right: Operations Intelligence Buttons, 2D/3D Switcher, E-Stop, Twin Badge */}
-      <div className="flex items-center gap-1 shrink-0">
-        {/* AI Operations Brain Buttons */}
+        {/* Direct Operational Drawer Pills */}
         <button
           type="button"
           onClick={() => setStore({ isDecisionLogOpen: true })}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] font-medium transition cursor-pointer active:scale-95 ${store.isDecisionLogOpen
-            ? "bg-indigo-950 border-indigo-700 text-indigo-300 shadow-sm"
-            : "bg-gray-900 border-white/5 text-gray-300 hover:bg-gray-800"
-            }`}
+          className="studio-btn flex items-center gap-1 px-2 py-1.5 rounded-full bg-[var(--studio-surface-subtle)] hover:bg-[var(--studio-surface-elevated)] border border-[var(--studio-border)] text-[var(--studio-text-primary)] text-[11px] font-medium cursor-pointer"
           title="Open AI Operations Decision Log"
         >
-          <Brain className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="hidden xl:inline">Decisions</span>
-          <span className="px-1 py-0.2 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800 text-[9px] font-mono">
-            {store.decisions.length}
+          <Brain className="w-3.5 h-3.5 text-studio-terracotta" strokeWidth={1.5} />
+          <span className="hidden 2xl:inline">Decisions</span>
+          <span className="font-mono text-[10px] text-[var(--studio-text-muted)] tabular-nums">
+            {decisions.length}
           </span>
         </button>
 
         <button
           type="button"
           onClick={() => setStore({ isApprovalsDrawerOpen: true })}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] font-medium transition cursor-pointer active:scale-95 ${store.pendingApprovals.length > 0
-            ? "bg-amber-950/80 border-amber-600 text-amber-300 animate-pulse"
-            : "bg-gray-900 border-white/5 text-gray-300 hover:bg-gray-800"
+          className={`studio-btn flex items-center gap-1 px-2 py-1.5 rounded-full border text-[11px] font-medium cursor-pointer ${pendingApprovals.length > 0
+            ? "bg-amber-600/15 border-amber-700/35 text-[#8F4F0D] dark:text-amber-300"
+            : "bg-[var(--studio-surface-subtle)] hover:bg-[var(--studio-surface-elevated)] border-[var(--studio-border)] text-[var(--studio-text-primary)]"
             }`}
-          title="Open Human-In-The-Loop Governance Queue"
+          title="Open Governance Approvals Queue"
         >
-          <UserCheck className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden xl:inline">Approvals</span>
-          {store.pendingApprovals.length > 0 && (
-            <span className="px-1 py-0.2 rounded-full bg-amber-500 text-black font-extrabold text-[9px] font-mono">
-              {store.pendingApprovals.length}
+          <UserCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+          {pendingApprovals.length > 0 && (
+            <span className="font-mono text-[10px] font-semibold tabular-nums">
+              {pendingApprovals.length}
             </span>
           )}
         </button>
 
-        {/* Phase 6: Chaos Engineering Studio */}
         <button
           type="button"
           onClick={() => setStore({ isChaosControlOpen: true })}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] font-medium transition cursor-pointer active:scale-95 ${store.activeFaults.length > 0
-            ? "bg-red-950/80 border-red-500 text-red-300 animate-pulse shadow-sm shadow-red-500/20"
-            : "bg-gray-900 border-white/5 text-gray-300 hover:bg-gray-800"
+          className={`studio-btn flex items-center gap-1 px-2 py-1.5 rounded-full border text-[11px] font-medium cursor-pointer ${faultCount > 0
+            ? "bg-red-600/15 border-red-700/35 text-[#9E2418] dark:text-red-300"
+            : "bg-[var(--studio-surface-subtle)] hover:bg-[var(--studio-surface-elevated)] border-[var(--studio-border)] text-[var(--studio-text-primary)]"
             }`}
-          title="Open Chaos Engineering & Resilience Studio"
+          title="Open Chaos & Fault Resilience Studio"
         >
-          <ZapOff className="w-3.5 h-3.5 text-red-400" />
-          <span className="hidden xl:inline">Chaos</span>
-          {store.activeFaults.length > 0 && (
-            <span className="px-1 py-0.2 rounded-full bg-red-500 text-white font-extrabold text-[9px] font-mono">
-              {store.activeFaults.length}
+          <ZapOff className="w-3.5 h-3.5" strokeWidth={1.5} />
+          {faultCount > 0 && (
+            <span className="font-mono text-[10px] font-semibold tabular-nums">
+              {faultCount}
             </span>
           )}
         </button>
 
-        {/* Phase 6: Supervisor Exceptions Queue */}
+        {/* Activity Drawer Toggle */}
         <button
           type="button"
-          onClick={() => setStore({ isExceptionsQueueOpen: true })}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] font-medium transition cursor-pointer active:scale-95 ${store.pendingExceptions.length > 0
-            ? "bg-amber-950/80 border-amber-500 text-amber-300 animate-pulse shadow-sm shadow-amber-500/20"
-            : "bg-gray-900 border-white/5 text-gray-300 hover:bg-gray-800"
+          aria-expanded={rightPanelOpen}
+          onClick={() => setStore({ rightPanelOpen: !rightPanelOpen })}
+          className={`studio-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-medium cursor-pointer whitespace-nowrap ${rightPanelOpen
+            ? "bg-[var(--studio-surface-elevated)] border-studio-terracotta/40 text-[var(--studio-text-primary)] shadow-sm"
+            : "bg-[var(--studio-surface-subtle)] border-[var(--studio-border)] text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)]"
             }`}
-          title="Open Supervisor Exceptions Queue"
+          title={rightPanelOpen ? "Collapse alerts & events drawer (])" : "Open alerts & events drawer (])"}
         >
-          <AlertOctagon className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden xl:inline">Exceptions</span>
-          {store.pendingExceptions.length > 0 && (
-            <span className="px-1 py-0.2 rounded-full bg-amber-500 text-black font-extrabold text-[9px] font-mono">
-              {store.pendingExceptions.length}
+          <Activity className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span className="hidden 2xl:inline">Activity</span>
+          {activeAlertCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-studio-terracotta text-white text-[9.5px] font-semibold leading-none tabular-nums">
+              {activeAlertCount}
             </span>
           )}
         </button>
 
-        {/* Phase 6: Immutable Audit Log Viewer */}
-        <button
-          type="button"
-          onClick={() => setStore({ isAuditLogOpen: true })}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] font-medium transition cursor-pointer active:scale-95 ${store.isAuditLogOpen
-            ? "bg-emerald-950 border-emerald-700 text-emerald-300 shadow-sm"
-            : "bg-gray-900 border-white/5 text-gray-300 hover:bg-gray-800"
-            }`}
-          title="Open Immutable SQLite Audit Ledger"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden xl:inline">Audit</span>
-        </button>
-
-        {/* Natural Language Command Bar Trigger */}
-        <button
-          type="button"
-          onClick={() => setStore({ isSupervisorBarOpen: true })}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-white/5 text-gray-300 hover:text-white text-[10px] font-medium transition cursor-pointer active:scale-95"
-          title="Open Natural Language Supervisor Command Bar (Ctrl+K)"
-        >
-          <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden 2xl:inline">Command</span>
-        </button>
-
-        {/* 2D / 3D / Split View Mode Switcher */}
-        <div className="flex items-center gap-0.5 bg-gray-900 border border-white/10 rounded-lg p-0.5 font-mono text-[10px]">
-          <button
-            type="button"
-            onClick={() => setStore({ viewMode: "2d" })}
-            className={`px-1.5 py-0.5 rounded-md transition cursor-pointer active:scale-95 font-bold ${store.viewMode === "2d"
-              ? "bg-cyan-500 text-black shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
-              }`}
-            title="2D Tactical Map View"
-          >
-            2D
-          </button>
-          <button
-            type="button"
-            onClick={() => setStore({ viewMode: "3d" })}
-            className={`px-1.5 py-0.5 rounded-md transition cursor-pointer active:scale-95 font-bold ${store.viewMode === "3d"
-              ? "bg-cyan-500 text-black shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
-              }`}
-            title="3D WebGL Digital Twin View"
-          >
-            3D
-          </button>
-          <button
-            type="button"
-            onClick={() => setStore({ viewMode: "split" })}
-            className={`px-1.5 py-0.5 rounded-md transition cursor-pointer active:scale-95 font-bold ${store.viewMode === "split"
-              ? "bg-cyan-500 text-black shadow-sm shadow-cyan-500/40"
-              : "text-gray-400 hover:text-white hover:bg-white/5"
-              }`}
-            title="Split Screen (2D + 3D Synchronized View)"
-          >
-            SPLIT
-          </button>
-        </div>
-
-        {/* Environment Disclosure Badge */}
+        {/* Environment Disclosure Pill (Exact Playwright role+name "DIGITAL TWIN") */}
         <button
           type="button"
           aria-label="DIGITAL TWIN"
           onClick={() => setStore({ isEnvironmentModalOpen: true })}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 hover:bg-emerald-900/60 transition text-[10px] font-semibold cursor-pointer active:scale-95"
-          title="Single disclosure surface — view simulation environment details"
+          className="studio-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-600/12 dark:bg-emerald-500/15 border border-emerald-700/25 dark:border-emerald-500/35 text-[#1D6144] dark:text-emerald-300 hover:bg-emerald-600/20 text-[11px] font-semibold whitespace-nowrap cursor-pointer"
+          title="Environment disclosure & twin configuration"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-          <span className="hidden sm:inline">DIGITAL TWIN</span>
-          <Info className="w-3 h-3 text-emerald-400/80" />
+          <span className="w-1.5 h-1.5 rounded-full bg-studio-sage dark:bg-emerald-400" />
+          <span className="hidden xl:inline">Digital Twin</span>
+          <Info className="w-3 h-3 opacity-80" strokeWidth={1.5} />
         </button>
 
-        {/* E-Stop Trigger Button */}
-        <button
-          type="button"
-          onClick={() => setStore({ isEStopModalOpen: true })}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-red-950/60 border border-red-800/80 text-red-400 hover:bg-red-900/60 transition font-bold text-[10px] cursor-pointer shadow-sm active:scale-95"
-          title="Trigger emergency stop"
-        >
-          <AlertTriangle className="w-3 h-3" />
-          <span>E-STOP</span>
-        </button>
-
-        {/* Theme Toggle */}
+        {/* Theme Toggle (Exact title for Playwright) */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
+          aria-label="Toggle Light/Dark Theme"
+          className="studio-btn p-1.5 rounded-full bg-[var(--studio-surface-subtle)] hover:bg-[var(--studio-surface-elevated)] border border-[var(--studio-border)] text-[var(--studio-text-secondary)] hover:text-[var(--studio-text-primary)] cursor-pointer"
           title="Toggle Light/Dark Theme"
         >
-          {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-        </button>
-
-        {/* Connection status indicator */}
-        <div
-          className="flex items-center gap-1 pl-1 border-l border-white/10 text-[10px] font-mono"
-          title={connected ? "Connected to simulation stream" : "Reconnecting to simulation stream..."}
-        >
-          <span className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" : "bg-amber-500"}`} />
-          <span className="text-gray-400 hidden xl:inline">{connected ? "Live" : "Offline"}</span>
-        </div>
-
-        {/* Toggle Right Sidebar */}
-        <button
-          type="button"
-          onClick={() => setStore({ rightPanelOpen: !rightPanelOpen })}
-          className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
-          title={rightPanelOpen ? "Collapse alerts sidebar (])" : "Expand alerts sidebar (])"}
-        >
-          {rightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+          {theme === "dark" ? (
+            <Sun className="w-3.5 h-3.5" strokeWidth={1.5} />
+          ) : (
+            <Moon className="w-3.5 h-3.5" strokeWidth={1.5} />
+          )}
         </button>
       </div>
     </header>

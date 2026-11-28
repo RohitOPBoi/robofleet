@@ -124,30 +124,111 @@ export async function scaleFleet(targetCount: number): Promise<void> {
   if (!res.ok) throw new Error("Failed to scale fleet");
 }
 
-// Phase 5: AI Operations Brain API
+// Phase 5+: AI Operations Brain & Local LLM API
 export async function fetchBrainStatus(): Promise<any> {
   const res = await fetch(`${API_BASE}/brain/status`);
   if (!res.ok) throw new Error("Failed to fetch brain status");
   return res.json();
 }
 
-export async function setBrainMode(enabled: boolean): Promise<any> {
+export async function setBrainMode(enabled: boolean, mode?: string): Promise<any> {
   const res = await fetch(`${API_BASE}/brain/mode`, {
     method: "POST",
     headers: getAuthHeader(),
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(mode ? { enabled, mode } : { enabled }),
   });
   if (!res.ok) throw new Error("Failed to set brain mode");
   return res.json();
 }
 
-export async function setBrainProvider(provider: "heuristic" | "anthropic" | "replay"): Promise<any> {
+export async function setBrainProvider(
+  provider: "heuristic" | "ai" | "local_llm" | "replay" | "baseline" | "anthropic"
+): Promise<any> {
   const res = await fetch(`${API_BASE}/brain/provider`, {
     method: "POST",
     headers: getAuthHeader(),
     body: JSON.stringify({ provider }),
   });
-  if (!res.ok) throw new Error("Failed to set brain provider");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail =
+      typeof err?.detail === "string"
+        ? err.detail
+        : err?.detail
+          ? JSON.stringify(err.detail)
+          : "";
+    throw new Error(detail || "Failed to set brain operating mode");
+  }
+  return res.json();
+}
+
+export async function fetchBrainConfig(): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/config`);
+  if (!res.ok) throw new Error("Failed to fetch brain configuration");
+  return res.json();
+}
+
+export async function updateAICloudConfig(payload: Record<string, any>): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/ai/config`, {
+    method: "POST",
+    headers: getAuthHeader(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to save AI Mode configuration");
+  }
+  return res.json();
+}
+
+export async function testAICloudConnection(payload?: Record<string, any>): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/ai/test`, {
+    method: "POST",
+    headers: getAuthHeader(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to verify Cloud AI connection");
+  }
+  return res.json();
+}
+
+export async function fetchLocalLLMStatus(): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/local/status`);
+  if (!res.ok) throw new Error("Failed to query Local LLM status");
+  return res.json();
+}
+
+export async function updateLocalLLMConfig(payload: Record<string, any>): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/local/config`, {
+    method: "POST",
+    headers: getAuthHeader(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to save Local LLM configuration");
+  }
+  return res.json();
+}
+
+export async function testLocalLLMConnection(payload?: Record<string, any>): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/local/test`, {
+    method: "POST",
+    headers: getAuthHeader(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to test Local Ollama connection");
+  }
+  return res.json();
+}
+
+export async function fetchBrainMetrics(): Promise<any> {
+  const res = await fetch(`${API_BASE}/brain/metrics`);
+  if (!res.ok) throw new Error("Failed to fetch brain operational metrics");
   return res.json();
 }
 
@@ -179,7 +260,16 @@ export async function sendSupervisorCommand(query: string, confirm = false): Pro
     headers: getAuthHeader(),
     body: JSON.stringify({ query, confirm }),
   });
-  if (!res.ok) throw new Error("Failed to process supervisor command");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail =
+      typeof err?.detail === "string"
+        ? err.detail
+        : err?.detail
+          ? JSON.stringify(err.detail)
+          : "";
+    throw new Error(detail || "Failed to process supervisor command");
+  }
   return res.json();
 }
 

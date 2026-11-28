@@ -15,11 +15,11 @@ flowchart TD
         Orchestrator --> P3[Exceptions & Recovery Specialist]
     end
     
-    subgraph ProviderPort [LLM Provider Port]
-        Orchestrator --> Prov[Anthropic Claude / Heuristic / Replay]
+    subgraph ProviderPort [Multi-Mode Provider Port]
+        Orchestrator --> Prov[Heuristic | AI Mode Cloud | Local LLM Ollama | Replay]
     end
     
-    Prov --> Decisions[Raw Action Proposals]
+    Prov --> Decisions[Validated & Arbitrated Proposals]
     
     subgraph Governance [Governance Layer CA-3]
         Decisions --> Gov[Declarative Policy Engine]
@@ -90,16 +90,30 @@ Every command must pass through the `GovernanceLayer` (`robofleet/brain/governan
 
 ---
 
-## 4. LLM Provider Port & Circuit Breaker Failover
+## 4. Operating Modes, Providers & Failover Attribution
 
-The system implements the `LLMProvider` Protocol (`robofleet/brain/providers/`):
-- **`HeuristicProvider`**: Fast, deterministic rules ($< 1$ms latency, \$0.00 cost).
-- **`AnthropicProvider`**: Claude 3.5 API provider.
-  - Automatic Circuit Breaker: Trips open after 3 consecutive failures.
-  - 30-second cooldown period before probing.
-  - **Zero Freeze Guarantee**: While tripped or during network timeout, immediately falls back within one tick ($< 1$ms) to the deterministic `HeuristicProvider`.
-  - Token budget & cost tracking per call.
-- **`ReplayProvider`**: Deterministic file-backed decision replay for automated CI/CD audits.
+The system implements four primary operating modes behind the `LLMProvider` Protocol (`robofleet/brain/providers/`), plus a fixed deterministic Baseline toggle (`enabled=false`):
+
+1. **Heuristic Mode (`HeuristicProvider`)**:
+   - Deterministic, sub-millisecond fleet orchestration coordinating all 4 domain specialists, proactive deadlock yield resolution, battery charger routing, station load balancing, and urgent order reprioritization (\$0.00 cost).
+2. **AI Mode (`UnifiedAIProvider`) — Cloud LLMs via User Credentials**:
+   - Provider-independent cloud inference supporting user-supplied API keys (via Command Centre UI, `ROBOFLEET_AI_API_KEY`, or provider env vars), editable base endpoints, API compatibility selection (`openai_chat`, `openai_responses`, `anthropic_messages`), and editable model names.
+   - Built-in presets for **OpenAI**, **OpenRouter**, **Groq**, **Together AI**, **Fireworks AI**, **DeepSeek**, **Anthropic** (`AnthropicProvider` internal adapter), and **Custom OpenAI-Compatible** endpoints.
+   - Non-blocking background inference with world-epoch checks and staleness limits so the 10 Hz simulation loop never freezes.
+3. **Local LLM Mode (`OllamaProvider`) — Self-Hosted On-Device Models**:
+   - Connects directly to local Ollama (`/api/tags`, `/api/chat`) defaulting to `http://localhost:11434`.
+   - **Recommended initial model: `qwen3.5:4b`** (`ollama pull qwen3.5:4b`). Configured for structured JSON responses (`format: "json"`, `think: false` compatibility handling, 4096 context window, low temperature 0.15, single-flight bounded concurrency).
+   - Health-checked locally with explicit fallback policy (`heuristic` or `safe_wait`) and zero silent cloud failover.
+4. **Replay Mode (`ReplayProvider`)**:
+   - File-backed NDJSON decision replay for deterministic CI audits and regression validation.
+
+### Honest Attribution & Deadlock Recovery
+- **Truthful Attribution**: If Cloud AI or Local Ollama fails, times out, returns invalid JSON, or opens its circuit breaker (default threshold: 3 consecutive failures), the orchestrator records `fallback_used: true`, `provider_mode: "heuristic_fallback"`, and a human-readable `fallback_reason` (never mislabeling a heuristic decision as an AI/Ollama decision).
+- **Deadlock Analyzer (`robofleet/brain/deadlock.py`)**: Detects head-on facing corridors, shared intersection contention, 3+ circular wait cycles, blocked routes, and unreachable paths beyond no-progress thresholds, proposing non-blocking `yield_robot` side-steps alongside `priority_robot_id` grants.
+- **Outcome Measurement Loop**: Evaluates post-execution simulation deltas (`delta_deadlocks`, `delta_blocked`, `delta_completed`, `delta_at_risk`) after `outcome_eval_window_ticks` and records `improved`, `neutral`, or `worsened` outcomes into subsequent briefs.
+
+### Credential Security
+- API keys entered in the UI are sent over the authenticated control channel (`/api/brain/ai/config`), kept exclusively in backend process memory (`SecretCredentialStore`), never saved to `localStorage`, never returned by `/api/brain/config` or `/api/config/effective`, never injected into LLM prompts, and scrubbed from logs via `SecretRedactingFilter`.
 
 ---
 

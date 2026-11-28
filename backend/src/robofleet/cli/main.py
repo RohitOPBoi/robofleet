@@ -377,7 +377,9 @@ def main(argv: list[str] | None = None) -> int:
     p_eval_ai = subparsers.add_parser("eval-ai", help="Evaluate AI operations brain against baseline")
     p_eval_ai.add_argument("--scenario", default="standard", help="Scenario preset name")
     p_eval_ai.add_argument(
-        "--modes", default="baseline,heuristic", help="Comma-separated modes (baseline, heuristic, ai)"
+        "--modes",
+        default="baseline,heuristic",
+        help="Comma-separated modes (baseline, heuristic, ai, local_llm, replay)",
     )
     p_eval_ai.add_argument("--seeds", default="1..5", help="Seed range (e.g. 1..10) or comma list")
     p_eval_ai.add_argument("--duration", type=int, default=60, help="Simulated duration in seconds")
@@ -395,7 +397,9 @@ def main(argv: list[str] | None = None) -> int:
         "--scenario", default="perfect_storm", help="Chaos scenario name (in scenarios/chaos/)"
     )
     p_chaos.add_argument(
-        "--modes", default="baseline,heuristic", help="Comma-separated modes (baseline, heuristic, ai)"
+        "--modes",
+        default="baseline,heuristic",
+        help="Comma-separated modes (baseline, heuristic, ai, local_llm, replay)",
     )
     p_chaos.add_argument("--seeds", default="1..5", help="Seed range (e.g. 1..10) or comma list")
     p_chaos.set_defaults(func=cmd_chaos)

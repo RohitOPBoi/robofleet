@@ -30,5 +30,8 @@ class Decision(RoboFleetBaseModel):
     latency_ms: float = 0.0
     token_usage: dict[str, int] = Field(default_factory=dict)
     cost_usd: float = 0.0
-    provider_mode: str = "heuristic"  # anthropic, heuristic, replay
+    provider_mode: str = "heuristic"  # ai, local_llm, heuristic, replay
+    provider_name: str = "Heuristic"
+    model_name: str = ""
+    fallback_used: bool = False
     rationale: str = ""

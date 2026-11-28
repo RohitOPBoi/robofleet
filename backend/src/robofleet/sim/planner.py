@@ -104,15 +104,18 @@ class AStarFlowPlanner:
         blocked_cells: set[tuple[int, int]],
         rng: np.random.Generator,
         current_tick: int = 0,
+        per_robot_avoid: dict[str, set[tuple[int, int]]] | None = None,
+        priority_robots: set[str] | None = None,
     ) -> tuple[dict[str, MoveIntent], list[str]]:
         grid = {(c.pos.x, c.pos.y): c for c in layout.cells}
         intents: dict[str, MoveIntent] = {}
         deadlocked_robot_ids: list[str] = []
+        prio_set = priority_robots or set()
 
-        # Sort robots by priority: longest blocked first, then ID
+        # Sort robots by priority: AI priority boost first, longest blocked first, then ID
         sorted_robots = sorted(
             robots,
-            key=lambda r: (-r.blocked_ticks, r.robot_id),
+            key=lambda r: (0 if r.robot_id in prio_set else 1, -r.blocked_ticks, r.robot_id),
         )
 
         robot_cells = {(r.cell.x, r.cell.y) for r in robots}
@@ -123,6 +126,10 @@ class AStarFlowPlanner:
                 hard_obstacles.add((r.cell.x, r.cell.y))
 
         for robot in sorted_robots:
+            robot_extra_avoid = (
+                per_robot_avoid.get(robot.robot_id, set()) if per_robot_avoid else set()
+            )
+            robot_hard_obs = hard_obstacles | robot_extra_avoid
             target = destinations.get(robot.robot_id)
             if not target or (robot.cell.x == target.x and robot.cell.y == target.y):
                 # Idle or already arrived
@@ -146,7 +153,7 @@ class AStarFlowPlanner:
                 and cached[0].y == robot.cell.y
                 and cached[-1].x == target.x
                 and cached[-1].y == target.y
-                and (cached[1].x, cached[1].y) not in hard_obstacles
+                and (cached[1].x, cached[1].y) not in robot_hard_obs
                 and (cached[1].x, cached[1].y) not in other_robots
                 and robot.blocked_ticks < self.replan_wait_ticks
             ):
@@ -160,14 +167,14 @@ class AStarFlowPlanner:
                 continue
 
             # Avoid other robots' cells to path around congestion
-            dyn_blocked = set(hard_obstacles) | other_robots
+            dyn_blocked = set(robot_hard_obs) | other_robots
             dyn_blocked.discard((target.x, target.y))
 
             # Replan path avoiding other robots
             path = astar_path(robot.cell, target, grid, dyn_blocked)
             if not path or len(path) <= 1:
                 # Fallback: avoid hard obstacles only
-                dyn_blocked_soft = set(hard_obstacles)
+                dyn_blocked_soft = set(robot_hard_obs)
                 dyn_blocked_soft.discard((target.x, target.y))
                 path = astar_path(robot.cell, target, grid, dyn_blocked_soft)
 
@@ -179,7 +186,7 @@ class AStarFlowPlanner:
                     self._cached_paths.pop(robot.robot_id, None)
                     # Look for immediate adjacent walkable bypass toward target
                     free_neighbors = _get_flow_neighbors(
-                        robot.cell, grid, set(hard_obstacles) | other_robots
+                        robot.cell, grid, set(robot_hard_obs) | other_robots
                     )
                     if free_neighbors:
                         bypass_cell = min(free_neighbors, key=lambda n: n.manhattan_distance(target))
@@ -198,10 +205,10 @@ class AStarFlowPlanner:
                     progress_permille=1000,
                 )
             else:
-                # If blocked and reached yield threshold, try random adjacent walkable yield cell
+                # If blocked and reached yield threshold, try adjacent walkable yield cell
                 if robot.blocked_ticks >= self.yield_wait_ticks:
                     neighbors = _get_flow_neighbors(
-                        robot.cell, grid, set(hard_obstacles) | other_robots
+                        robot.cell, grid, set(robot_hard_obs) | other_robots
                     )
                     if neighbors:
                         yield_cell = neighbors[rng.integers(0, len(neighbors))]

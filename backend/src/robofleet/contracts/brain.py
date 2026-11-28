@@ -58,6 +58,38 @@ class SendToChargeCommand(BrainBaseCommand):
     charger_id: str | None = None
 
 
+class YieldRobotCommand(BrainBaseCommand):
+    command_type: Literal["yield_robot"] = "yield_robot"
+    robot_id: str
+    yield_cell: Coordinate | None = None
+    hold_ticks: int = Field(default=15, ge=1, le=200)
+    priority_robot_id: str | None = None
+
+
+class ReassignTaskCommand(BrainBaseCommand):
+    command_type: Literal["reassign_task"] = "reassign_task"
+    robot_id: str
+    target_robot_id: str | None = None
+    order_id: str | None = None
+
+
+class SubstituteItemCommand(BrainBaseCommand):
+    command_type: Literal["substitute_item"] = "substitute_item"
+    order_id: str
+    sku_id: str
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
+class RerouteStationCommand(BrainBaseCommand):
+    command_type: Literal["reroute_station"] = "reroute_station"
+    station_id: str
+
+
+class ClearFaultBrainCommand(BrainBaseCommand):
+    command_type: Literal["clear_fault"] = "clear_fault"
+    target_id: str
+
+
 class HoldZoneCommand(BrainBaseCommand):
     command_type: Literal["hold_zone"] = "hold_zone"
     zone_id: str
@@ -101,6 +133,11 @@ type BrainCommandUnion = (
     | BatchOrdersCommand
     | RerouteRobotCommand
     | SendToChargeCommand
+    | YieldRobotCommand
+    | ReassignTaskCommand
+    | SubstituteItemCommand
+    | RerouteStationCommand
+    | ClearFaultBrainCommand
     | HoldZoneCommand
     | ReleaseZoneCommand
     | SetStationPolicyCommand
@@ -108,6 +145,37 @@ type BrainCommandUnion = (
     | EscalateToHumanCommand
     | NoActionCommand
 )
+
+
+COMMAND_TYPE_MODELS: dict[str, type[BrainBaseCommand]] = {
+    "assign_task": AssignTaskCommand,
+    "reprioritise_order": ReprioritiseOrderCommand,
+    "batch_orders": BatchOrdersCommand,
+    "reroute_robot": RerouteRobotCommand,
+    "send_to_charge": SendToChargeCommand,
+    "yield_robot": YieldRobotCommand,
+    "reassign_task": ReassignTaskCommand,
+    "substitute_item": SubstituteItemCommand,
+    "reroute_station": RerouteStationCommand,
+    "clear_fault": ClearFaultBrainCommand,
+    "hold_zone": HoldZoneCommand,
+    "release_zone": ReleaseZoneCommand,
+    "set_station_policy": SetStationPolicyCommand,
+    "set_strategy_params": SetStrategyParamsCommand,
+    "escalate_to_human": EscalateToHumanCommand,
+    "no_action": NoActionCommand,
+}
+
+
+def validate_brain_command(raw_cmd: dict[str, Any]) -> BrainBaseCommand:
+    """Strictly validate an arbitrary dict against known typed Brain commands."""
+    if not isinstance(raw_cmd, dict):
+        raise ValueError("Command must be a JSON object")
+    cmd_type = raw_cmd.get("command_type")
+    if not isinstance(cmd_type, str) or cmd_type not in COMMAND_TYPE_MODELS:
+        raise ValueError(f"Unsupported or missing command_type: {cmd_type!r}")
+    model_cls = COMMAND_TYPE_MODELS[cmd_type]
+    return model_cls.model_validate(raw_cmd)
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +191,8 @@ class BriefKPIs(RoboFleetBaseModel):
     robots_idle: int = 0
     robots_charging: int = 0
     fleet_utilization_pct: float = 0.0
+    avg_waiting_ticks: float = 0.0
+    active_deadlocks_count: int = 0
 
 
 class BriefOrderSummary(RoboFleetBaseModel):
@@ -139,6 +209,7 @@ class BriefStationQueue(RoboFleetBaseModel):
     queue_length: int
     active_robot_id: str | None = None
     avg_service_time_ticks: float = 30.0
+    is_active: bool = True
 
 
 class BriefRobotSummary(RoboFleetBaseModel):
@@ -148,6 +219,41 @@ class BriefRobotSummary(RoboFleetBaseModel):
     current_coord: Coordinate
     current_task_type: str | None = None
     carrying_tote: bool = False
+    destination: Coordinate | None = None
+    blocked_ticks: int = 0
+    waiting_for_robot_id: str | None = None
+    nearest_charger_distance: int | None = None
+    has_valid_route: bool = True
+    fault: str | None = None
+
+
+class BriefDeadlockInfo(RoboFleetBaseModel):
+    conflict_id: str
+    conflict_type: Literal[
+        "facing_corridor",
+        "intersection_conflict",
+        "circular_deadlock",
+        "blocked_route",
+        "stuck_no_route",
+    ]
+    robots_involved: list[str] = Field(default_factory=list)
+    cycle_chain: list[str] = Field(default_factory=list)
+    conflict_cells: list[Coordinate] = Field(default_factory=list)
+    recommended_yield_robot: str | None = None
+    recommended_yield_cell: Coordinate | None = None
+    recommended_priority_robot: str | None = None
+    no_route_available: bool = False
+    max_blocked_ticks: int = 0
+    description: str = ""
+
+
+class BriefOutcomeSummary(RoboFleetBaseModel):
+    decision_id: str
+    tick: int
+    provider: str
+    commands: list[str] = Field(default_factory=list)
+    observed_outcome: str = "unknown"
+    summary: str = ""
 
 
 class SituationBrief(RoboFleetBaseModel):
@@ -157,10 +263,18 @@ class SituationBrief(RoboFleetBaseModel):
     at_risk_orders: list[BriefOrderSummary] = Field(default_factory=list)
     station_queues: list[BriefStationQueue] = Field(default_factory=list)
     critical_robots: list[BriefRobotSummary] = Field(default_factory=list)
+    robots_overview: list[BriefRobotSummary] = Field(default_factory=list)
     congested_cells: list[Coordinate] = Field(default_factory=list)
+    deadlocks_detected: list[BriefDeadlockInfo] = Field(default_factory=list)
     active_alert_ids: list[str] = Field(default_factory=list)
     held_zone_ids: list[str] = Field(default_factory=list)
+    available_zones: list[str] = Field(default_factory=list)
+    available_chargers: list[str] = Field(default_factory=list)
     recent_decision_ids: list[str] = Field(default_factory=list)
+    recent_outcomes: list[BriefOutcomeSummary] = Field(default_factory=list)
+    failed_command_hints: list[str] = Field(default_factory=list)
+    specialist_summary: list[DecisionProposal] = Field(default_factory=list)
+    battery_thresholds: dict[str, float] = Field(default_factory=dict)
     brief_hash: str = ""
 
     def compute_hash(self) -> str:
@@ -175,7 +289,7 @@ class SituationBrief(RoboFleetBaseModel):
 # ---------------------------------------------------------------------------
 
 class DecisionProposal(RoboFleetBaseModel):
-    specialist: Literal["planner", "traffic", "exceptions", "explainer", "human"]
+    specialist: Literal["planner", "traffic", "exceptions", "explainer", "human", "orchestrator"]
     action: str
     command: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -189,13 +303,28 @@ class Decision(RoboFleetBaseModel):
     brief_hash: str
     proposals: list[DecisionProposal] = Field(default_factory=list)
     final_commands: list[dict[str, Any]] = Field(default_factory=list)
+    rejected_commands: list[dict[str, Any]] = Field(default_factory=list)
     governance_outcome: Literal["approved", "require_human", "denied"] = "approved"
     execution_result: Literal["success", "partial", "failed", "rejected_by_safety"] = "success"
     observed_outcome: Literal["improved", "neutral", "worsened", "unknown"] = "unknown"
     latency_ms: float = 0.0
     token_usage: dict[str, int] = Field(default_factory=dict)
     cost_usd: float = 0.0
-    provider_mode: Literal["anthropic", "heuristic", "replay"] = "heuristic"
+    operating_mode: Literal["heuristic", "ai", "local_llm", "replay"] = "heuristic"
+    provider_mode: Literal[
+        "heuristic", "ai", "local_llm", "replay", "anthropic", "heuristic_fallback"
+    ] = "heuristic"
+    provider_name: str = "Heuristic"
+    model_name: str = ""
+    fallback_used: bool = False
+    fallback_reason: str = ""
+    attribution: str = ""
+    situation_summary: str = ""
+    traffic_plan: dict[str, Any] = Field(default_factory=dict)
+    unresolved_risks: list[str] = Field(default_factory=list)
+    confidence: float = 1.0
+    outcome_metrics: dict[str, Any] = Field(default_factory=dict)
+    decision_version: int = 0
     rationale: str = ""
 
 
